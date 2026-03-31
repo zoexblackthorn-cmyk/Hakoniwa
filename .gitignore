@@ -1,0 +1,44 @@
+# === General ===
+.DS_Store
+Thumbs.db
+*.log
+.env
+.env.local
+.env.*.local
+
+# === Frontend (Node/Vue) ===
+hakoniwa-frontend/node_modules/
+hakoniwa-frontend/dist/
+hakoniwa-frontend/dist-ssr/
+hakoniwa-frontend/*.local
+hakoniwa-frontend/.vscode/*
+!hakoniwa-frontend/.vscode/extensions.json
+hakoniwa-frontend/.idea
+
+# === Backend (Python) ===
+hakoniwa-backend/venv/
+hakoniwa-backend/__pycache__/
+hakoniwa-backend/**/*.pyc
+hakoniwa-backend/**/*.pyo
+hakoniwa-backend/**/*.pyd
+hakoniwa-backend/.Python
+hakoniwa-backend/*.so
+
+# === SQLite Databases ===
+*.db
+*.sqlite
+*.sqlite3
+hakoniwa-backend/data/
+
+# === IDE/Editor ===
+.idea/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# === OS Files ===
+*.tmp
+*.temp
