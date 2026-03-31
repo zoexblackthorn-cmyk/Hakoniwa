@@ -11,7 +11,8 @@ import re
 from memory import (
     write_event, query_events, 
     write_insight, query_insights, update_insight_confidence,
-    merge_insights, get_evidence
+    merge_insights, get_evidence,
+    search_insights_semantic
 )
 from llm_provider import get_llm
 
@@ -325,11 +326,22 @@ def run_reflection(event_limit: int = 20) -> dict:
 
 # ============ 获取上下文（给对话用）============
 
-def get_context_for_conversation() -> str:
+def get_context_for_conversation(current_message: str = "") -> str:
     """
-    获取当前所有有效洞察，用于注入对话 context
+    获取用于注入对话 context 的洞察
+    
+    Args:
+        current_message: 当前用户消息，用于语义搜索相关洞察
+    
+    Returns:
+        格式化的上下文字符串
     """
-    insights = query_insights(min_confidence=0.3, limit=30)
+    # 如果有当前消息，使用语义搜索获取最相关的洞察
+    if current_message:
+        insights = search_insights_semantic(current_message, top_k=8)
+    else:
+        # Fallback 到原来的逻辑：按 confidence 排序返回全部
+        insights = query_insights(min_confidence=0.3, limit=30)
     
     if not insights:
         return ""

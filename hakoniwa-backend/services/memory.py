@@ -42,10 +42,10 @@ class MemoryService:
         self._ensure_init()
         return query_insights(min_confidence=min_confidence)
     
-    def get_context(self) -> str:
+    def get_context(self, current_message: str = "") -> str:
         """获取用于注入 system prompt 的上下文"""
         self._ensure_init()
-        return get_context_for_conversation()
+        return get_context_for_conversation(current_message=current_message)
     
     # ============ 反思操作 ============
     

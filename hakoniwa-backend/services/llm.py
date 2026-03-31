@@ -17,8 +17,8 @@ class LLMService:
         # 1. 记录用户消息到记忆系统
         memory_service.record_message(message, role="user")
         
-        # 2. 获取洞察上下文
-        memory_context = memory_service.get_context()
+        # 2. 获取洞察上下文（传入当前消息用于语义搜索）
+        memory_context = memory_service.get_context(current_message=message)
         
         # 3. 调用 LLM
         llm_cfg = settings_service.settings.api.llm

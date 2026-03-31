@@ -8,9 +8,118 @@ import sqlite3
 import json
 import os
 import asyncio
+import math
 from datetime import datetime, timedelta
 from typing import Optional
 from pathlib import Path
+
+# Voyage AI Embedding
+import numpy as np
+
+VOYAGE_API_KEY = os.environ.get("VOYAGE_API_KEY")
+_voyage_client = None
+
+def _get_voyage_client():
+    """获取 Voyage AI 客户端（延迟初始化）"""
+    global _voyage_client
+    if _voyage_client is None and VOYAGE_API_KEY:
+        import voyageai
+        _voyage_client = voyageai.Client(api_key=VOYAGE_API_KEY)
+    return _voyage_client
+
+
+def get_embedding(text: str, input_type: str = "document") -> list[float] | None:
+    """
+    调用 Voyage AI 生成 embedding
+    
+    Args:
+        text: 要编码的文本
+        input_type: "document" 或 "query"
+    
+    Returns:
+        list[float] 或 None（如果 API key 不存在或调用失败）
+    """
+    if not VOYAGE_API_KEY:
+        return None
+    
+    try:
+        client = _get_voyage_client()
+        if not client:
+            return None
+        
+        result = client.embed(
+            texts=[text],
+            model="voyage-3.5",
+            input_type=input_type
+        )
+        
+        if result.embeddings and len(result.embeddings) > 0:
+            return result.embeddings[0]
+        return None
+    except Exception as e:
+        print(f"[Embedding Error] {e}")
+        return None
+
+
+def cosine_similarity(a: list[float], b: list[float]) -> float:
+    """计算两个向量的余弦相似度"""
+    a_np = np.array(a)
+    b_np = np.array(b)
+    
+    norm_a = np.linalg.norm(a_np)
+    norm_b = np.linalg.norm(b_np)
+    
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    
+    return float(np.dot(a_np, b_np) / (norm_a * norm_b))
+
+
+def search_insights_semantic(query_text: str, top_k: int = 5) -> list[dict]:
+    """
+    语义搜索洞察
+    
+    Args:
+        query_text: 查询文本
+        top_k: 返回最相关的数量
+    
+    Returns:
+        带相似度分数的洞察列表
+    """
+    # 获取 query embedding
+    query_embedding = get_embedding(query_text, input_type="query")
+    
+    if query_embedding is None:
+        # 如果 embedding 失败，返回空列表（graceful fallback）
+        return []
+    
+    # 从数据库读取有 embedding 且未被 invalidated 的 insights
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT * FROM insights 
+           WHERE embedding IS NOT NULL 
+             AND invalidated = 0 
+             AND parent_id IS NULL
+           ORDER BY updated_at DESC"""
+    ).fetchall()
+    conn.close()
+    
+    # 计算相似度
+    scored_insights = []
+    for row in rows:
+        try:
+            insight_embedding = json.loads(row["embedding"])
+            if insight_embedding:
+                score = cosine_similarity(query_embedding, insight_embedding)
+                insight_dict = dict(row)
+                insight_dict["score"] = score
+                scored_insights.append(insight_dict)
+        except (json.JSONDecodeError, TypeError):
+            continue
+    
+    # 按相似度排序，返回 top_k
+    scored_insights.sort(key=lambda x: x["score"], reverse=True)
+    return scored_insights[:top_k]
 
 # 数据库路径（可通过环境变量配置）
 DB_PATH = Path(os.environ.get("HAKONIWA_DB", Path(__file__).parent / "hakoniwa.db"))
@@ -38,7 +147,8 @@ def init_db():
             content TEXT NOT NULL,
             importance REAL DEFAULT 0.5,  -- 0-1，影响衰减速度
             decayed INTEGER DEFAULT 0,    -- 是否已衰减（软删除）
-            metadata TEXT                 -- JSON，扩展字段
+            metadata TEXT,                -- JSON，扩展字段
+            embedding TEXT                -- JSON序列化后的向量
         );
         
         -- 洞察表：归纳后的认知
@@ -54,6 +164,7 @@ def init_db():
             invalidated INTEGER DEFAULT 0, -- 是否被推翻
             parent_id INTEGER DEFAULT NULL, -- 如果是证据，指向主洞察
             processed INTEGER DEFAULT 0,   -- 是否已被 inner-life 处理
+            embedding TEXT,                -- JSON序列化后的向量
             FOREIGN KEY (parent_id) REFERENCES insights(id)
         );
         
@@ -106,10 +217,14 @@ def write_event(
     ts = timestamp or datetime.now().isoformat()
     meta_json = json.dumps(metadata) if metadata else None
     
+    # 生成 embedding
+    embedding = get_embedding(content, input_type="document")
+    embedding_json = json.dumps(embedding) if embedding else None
+    
     cursor = conn.execute(
-        """INSERT INTO events (timestamp, type, role, content, importance, metadata)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (ts, type, role, content, importance, meta_json)
+        """INSERT INTO events (timestamp, type, role, content, importance, metadata, embedding)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (ts, type, role, content, importance, meta_json, embedding_json)
     )
     conn.commit()
     event_id = cursor.lastrowid
@@ -197,10 +312,14 @@ def write_insight(
     now = datetime.now().isoformat()
     source_json = json.dumps(source_event_ids) if source_event_ids else "[]"
     
+    # 生成 embedding
+    embedding = get_embedding(content, input_type="document")
+    embedding_json = json.dumps(embedding) if embedding else None
+    
     cursor = conn.execute(
-        """INSERT INTO insights (created_at, updated_at, content, category, confidence, source_event_ids)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (now, now, content, category, confidence, source_json)
+        """INSERT INTO insights (created_at, updated_at, content, category, confidence, source_event_ids, embedding)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (now, now, content, category, confidence, source_json, embedding_json)
     )
     conn.commit()
     insight_id = cursor.lastrowid
