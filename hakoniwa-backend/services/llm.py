@@ -6,6 +6,7 @@ from memory import (
     get_conversation_messages,
     delete_conversations as db_delete_conversations,
 )
+from ennoia import ennoia 
 
 
 class LLMService:
@@ -13,26 +14,31 @@ class LLMService:
 
     async def chat(self, message: str, conversation_id: Optional[str] = None) -> str:
         """发送消息并获取回复"""
-        
-        # 1. 记录用户消息到记忆系统
+    
         memory_service.record_message(message, role="user")
         
-        # 2. 获取洞察上下文（传入当前消息用于语义搜索）
+        try:
+            ennoia.on_user_message(quality="casual")
+        except Exception as e:
+            print(f"[Ennoia] on_user_message error: {e}")
+        
         memory_context = memory_service.get_context(current_message=message)
         
-        # 3. 调用 LLM
+        try:
+            inner_life_context = ennoia.get_prompt_context()
+        except Exception:
+            inner_life_context = ""
+        
         llm_cfg = settings_service.settings.api.llm
         provider = llm_cfg.provider.lower()
 
         if provider == "claude":
-            reply = await self._chat_claude(message, conversation_id, memory_context)
+            reply = await self._chat_claude(message, conversation_id, memory_context, inner_life_context)
         elif provider == "gemini":
-            reply = await self._chat_gemini(message, conversation_id, memory_context)
+            reply = await self._chat_gemini(message, conversation_id, memory_context, inner_life_context)
         else:
-            # OpenAI 兼容格式（Kimi、DeepSeek、SiliconFlow、OpenAI 等）
-            reply = await self._chat_openai_compatible(message, conversation_id, memory_context)
+            reply = await self._chat_openai_compatible(message, conversation_id, memory_context, inner_life_context)
         
-        # 4. 记录 AI 回复到记忆系统
         memory_service.record_message(reply, role="assistant")
         
         return reply
@@ -45,7 +51,7 @@ class LLMService:
         return [{"role": m["role"], "content": m["content"]} for m in messages]
 
     # ─── Claude (Anthropic) ───
-    async def _chat_claude(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "") -> str:
+    async def _chat_claude(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "") -> str:
         import anthropic
 
         llm_cfg = settings_service.settings.api.llm
@@ -57,8 +63,7 @@ class LLMService:
             kwargs["base_url"] = llm_cfg.base_url
 
         client = anthropic.Anthropic(**kwargs)
-        system_prompt = settings_service.build_system_prompt(memory_context)
-
+        system_prompt = settings_service.build_system_prompt(memory_context, inner_life_context)
         # 构建消息历史
         history = self._load_history(conversation_id)
         history.append({"role": "user", "content": message})
@@ -80,7 +85,7 @@ class LLMService:
         return reply
 
     # ─── Gemini (Google) ───
-    async def _chat_gemini(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "") -> str:
+    async def _chat_gemini(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "") -> str:
         import google.generativeai as genai
 
         llm_cfg = settings_service.settings.api.llm
@@ -114,7 +119,7 @@ class LLMService:
         return reply
 
     # ─── OpenAI Compatible (Kimi / DeepSeek / OpenAI / etc.) ───
-    async def _chat_openai_compatible(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "") -> str:
+    async def _chat_openai_compatible(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "") -> str:
         from openai import AsyncOpenAI
 
         llm_cfg = settings_service.settings.api.llm
@@ -125,20 +130,23 @@ class LLMService:
             api_key=llm_cfg.api_key,
             base_url=llm_cfg.base_url or None,
         )
-        system_prompt = settings_service.build_system_prompt(memory_context)
-
+        system_prompt = settings_service.build_system_prompt(memory_context, inner_life_context)
         # 构建消息历史
         history = self._load_history(conversation_id)
         if system_prompt:
             history.insert(0, {"role": "system", "content": system_prompt})
         history.append({"role": "user", "content": message})
 
-        response = await client.chat.completions.create(
-            model=llm_cfg.model,
-            messages=history,
-            max_tokens=2048,
-            temperature=0.7,
-        )
+        create_kwargs = {
+            "model": llm_cfg.model,
+            "messages": history,
+            "max_tokens": 2048,
+        }
+        # kimi-k2.5 不允许自定义 temperature,强制为 1
+        if "k2.5" not in llm_cfg.model.lower():
+            create_kwargs["temperature"] = 0.7
+        
+        response = await client.chat.completions.create(**create_kwargs)
 
         reply = response.choices[0].message.content
 

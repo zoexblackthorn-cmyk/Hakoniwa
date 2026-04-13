@@ -7,8 +7,8 @@
   "api": {
     "llm": {
       "provider": "kimi",
-      "api_key": "sk-OGijShY8h0g8JCrhXsR1SNf4g2xWY97QuTpIvTEsPmdMMrJn",
-      "model": "moonshot-v1-8k",
+      "api_key": "sk-ir2Ngz5bkyDg1ROcg4tBHzjNkM3V6LNA6sACa1nzWvgTjvak",
+      "model": "kimi-k2.5",
       "base_url": "https://api.moonshot.cn/v1"
     },
     "tts": {

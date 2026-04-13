@@ -89,8 +89,8 @@ class SettingsService:
         self._save()
         return self._settings
 
-    def build_system_prompt(self, memory_context: str = "") -> str:
-        """组装最终 system prompt：底层 + soul + mask + personalization + memory"""
+    def build_system_prompt(self, memory_context: str = "", inner_life_context: str = "") -> str:
+        """组装最终 system prompt：底层 + soul + mask + personalization + memory + inner life"""
         s = self.settings.character
         parts = [config.BASE_SYSTEM_PROMPT]
 
@@ -102,9 +102,10 @@ class SettingsService:
             parts.append(f"\n\n## 用户偏好（Personalization）\n{s.personalization}")
         if memory_context.strip():
             parts.append(f"\n\n## 你对用户的了解（Memory）\n{memory_context}")
+        if inner_life_context.strip():
+            parts.append(f"\n\n## 你的内在状态（Inner Life）\n{inner_life_context}")
 
         return "".join(parts)
-
     @staticmethod
     def _deep_merge(base: dict, override: dict):
         """递归深合并"""

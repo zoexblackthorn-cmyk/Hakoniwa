@@ -8,6 +8,7 @@ Thumbs.db
 
 # === Frontend (Node/Vue) ===
 hakoniwa-frontend/node_modules/
+hakoniwa-frontend/venv/
 hakoniwa-frontend/dist/
 hakoniwa-frontend/dist-ssr/
 hakoniwa-frontend/*.local

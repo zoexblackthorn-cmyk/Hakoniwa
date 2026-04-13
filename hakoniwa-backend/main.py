@@ -13,6 +13,8 @@ from memory import (
     get_conversation_dates,
     delete_conversations as db_delete_conversations,
 )
+import asyncio
+from ennoia import ennoia
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -174,6 +176,12 @@ async def get_memory_context():
 async def run_reflect(event_limit: int = 20):
     """手动触发反思"""
     result = memory_service.reflect(event_limit)
+    # 反思产生新 insights 后，同步活动池
+    from services.activity_bridge import sync_activity_pool
+    try:
+        sync_activity_pool()
+    except Exception as e:
+        print(f"[ActivityBridge] sync error: {e}")
     return result
 
 
@@ -196,7 +204,96 @@ async def set_perspective(s_n: float, t_f: float):
     memory_service.set_perspective(s_n, t_f)
     return memory_service.get_perspective()
 
+# ════════════════════════════════════════
+#  Ennoia (Inner Life)
+# ════════════════════════════════════════
 
+_tick_task: asyncio.Task | None = None
+
+
+async def _tick_loop():
+    """每 30 秒运行一次 ennoia.tick()"""
+    while True:
+        await asyncio.sleep(30)
+        try:
+            summary = ennoia.tick()
+            # 有欲望生成或活动切换时才打日志
+            if summary.get("desire_generated") or summary.get("activity_started"):
+                print(f"[Ennoia] {summary}")
+        except Exception as e:
+            print(f"[Ennoia tick error] {e}")
+
+
+@app.on_event("startup")
+async def on_startup():
+    global _tick_task
+    _tick_task = asyncio.create_task(_tick_loop())
+    print("🧠 Ennoia tick scheduler started (every 30s)")
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    global _tick_task
+    if _tick_task:
+        _tick_task.cancel()
+        try:
+            await _tick_task
+        except asyncio.CancelledError:
+            pass
+    print("🧠 Ennoia tick scheduler stopped")
+
+
+@app.get("/api/ennoia/state")
+async def ennoia_state():
+    """当前内在状态快照"""
+    return {
+        "needs": ennoia.needs.to_dict(),
+        "mood": ennoia.mood.to_dict(),
+        "personality": ennoia.personality.to_dict(),
+        "current_activity": ennoia.current_activity.to_dict(),
+        "unshared_experiences": ennoia.unshared_experiences,
+        "closeness": ennoia.closeness,
+        "last_user_interaction_at": ennoia.last_user_interaction_at,
+        "last_initiative_at": ennoia.last_initiative_at,
+    }
+
+
+@app.get("/api/ennoia/desires")
+async def ennoia_desires():
+    """Pending 欲望列表"""
+    from memory import get_db
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM desires WHERE status IN ('pending', 'active') ORDER BY created_at DESC"
+    ).fetchall()
+    conn.close()
+    return {"desires": [dict(r) for r in rows]}
+
+
+@app.get("/api/ennoia/activity-pool")
+async def ennoia_activity_pool():
+    """当前活动池"""
+    from memory import get_db
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM activity_pool ORDER BY affinity DESC").fetchall()
+    conn.close()
+    return {"activities": [dict(r) for r in rows]}
+
+
+@app.post("/api/ennoia/tick")
+async def ennoia_manual_tick():
+    """手动触发一次 tick（调试用）"""
+    summary = ennoia.tick()
+    return summary
+
+
+@app.get("/api/ennoia/initiative")
+async def ennoia_check_initiative():
+    """检查是否应该主动找用户"""
+    result = ennoia.should_initiate()
+    if result:
+        return {"should_send": True, "desire": result}
+    return {"should_send": False}
 # ════════════════════════════════════════
 #  启动
 # ════════════════════════════════════════
