@@ -43,3 +43,4 @@ hakoniwa-backend/data/
 # === OS Files ===
 *.tmp
 *.temp
+hakoniwa-backend/settings.json

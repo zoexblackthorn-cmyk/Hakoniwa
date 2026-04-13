@@ -1,0 +1,34 @@
+{
+  "character": {
+    "soul": "",
+    "mask": "",
+    "personalization": ""
+  },
+  "api": {
+    "llm": {
+      "provider": "",
+      "api_key": "",
+      "model": "",
+      "base_url": ""
+    },
+    "tts": {
+      "provider": "",
+      "api_key": "",
+      "voice_id": "",
+      "base_url": ""
+    },
+    "search": {
+      "provider": "",
+      "api_key": ""
+    },
+    "image_gen": {
+      "provider": "",
+      "api_key": "",
+      "model": ""
+    }
+  },
+  "theme": {
+    "dark_mode": false,
+    "skin": "default"
+  }
+}
