@@ -61,6 +61,20 @@
 **根因:** `MessageList.vue` 只在 `messages.length` 变化时滚动。但 `AppShell` 预加载消息时 `MessageList` 还没渲染，打开聊天窗口后 `length` 不变，watch 不触发。  
 **修复:** `MessageList.vue` 新增 `onMounted` + `scrollToBottom()`，挂载时如果已有消息立即滚到底部。
 
+### 6. Claude 代码审查修复（7 处 bug）
+**来源:** Claude 代码审查报告  
+**修复文件:**
+
+| # | 文件 | 问题 | 修复 |
+|---|------|------|------|
+| 1 | `services/llm.py` | `_chat_gemini` 未传递 `inner_life_context` 给 `build_system_prompt` | 补全第二个参数，与 Claude/OpenAI 路径一致 |
+| 2 | `main.py` | 调度意图分支 (`is_task=True`) 直接 return，未记录消息、未触发 Ennoia、未写入对话历史 | return 前调用 `memory_service.record_message`、`ennoia.on_user_message`、`save_conversation_message`（conversation_id 非空时） |
+| 3 | `main.py` | `_last_chat_error` 在文件顶部和 Debug 区重复声明 | 删除 Debug 区重复声明 |
+| 4 | `memory.py` | `save_conversation_message` 未过滤空内容 | 开头加判空：content 为 None 或空字符串时 `return -1` 并打印跳过日志 |
+| 5 | `services/llm.py` | 四个方法使用可变默认值 `attachments: list[str] = []` | 改为 `list[str] \| None = None`，方法体内 `attachments = attachments or []` |
+| 6 | `src/stores/chat.ts` | `JSON.parse(m.metadata)` 无保护，脏数据会导致整个加载崩溃 | 用 IIFE + try/catch 包裹，解析失败返回 `undefined` |
+| 7 | `config.py` | 默认端口 `8000` 与前端 `.env.development` 的 `8001` 不一致 | 默认值改为 `8001` |
+
 ---
 
 ## 今日新增内容

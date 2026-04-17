@@ -542,6 +542,9 @@ def save_conversation_message(
     metadata: Optional[dict] = None
 ) -> int:
     """保存一条对话消息，返回 message_id"""
+    if content is None or (isinstance(content, str) and not content.strip()):
+        print(f"[save_conversation_message] skipped empty message for conversation {conversation_id}")
+        return -1
     ensure_conversation(conversation_id)
     conn = get_db()
     ts = timestamp or datetime.now().isoformat()

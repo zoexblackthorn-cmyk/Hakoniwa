@@ -39,7 +39,7 @@ SETTINGS_FILE = os.getenv("SETTINGS_FILE", "settings.json")
 
 # ─── 服务配置 ───
 HOST = os.getenv("HOST", "0.0.0.0")
-PORT = int(os.getenv("PORT", "8000"))
+PORT = int(os.getenv("PORT", "8001"))
 DEBUG = os.getenv("DEBUG", "true").lower() == "true"
 
 # CORS

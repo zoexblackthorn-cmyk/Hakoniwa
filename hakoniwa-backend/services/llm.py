@@ -25,8 +25,9 @@ def _parse_data_url(data_url: str) -> tuple[str, bytes]:
 class LLMService:
     """LLM 服务 - 动态支持 Claude、Gemini 和 OpenAI 兼容"""
 
-    async def chat(self, message: str, conversation_id: Optional[str] = None, attachments: list[str] = []) -> str:
+    async def chat(self, message: str, conversation_id: Optional[str] = None, attachments: list[str] | None = None) -> str:
         """发送消息并获取回复"""
+        attachments = attachments or []
 
         memory_service.record_message(message, role="user")
 
@@ -68,7 +69,8 @@ class LLMService:
         ]
 
     # ─── Claude (Anthropic) ───
-    async def _chat_claude(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] = []) -> str:
+    async def _chat_claude(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None) -> str:
+        attachments = attachments or []
         import anthropic
 
         llm_cfg = settings_service.settings.api.llm
@@ -125,7 +127,8 @@ class LLMService:
         return reply
 
     # ─── Gemini (Google) ───
-    async def _chat_gemini(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] = []) -> str:
+    async def _chat_gemini(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None) -> str:
+        attachments = attachments or []
         import google.generativeai as genai
         from PIL import Image
 
@@ -134,7 +137,7 @@ class LLMService:
             raise Exception("请先在设置中配置 Gemini API Key")
 
         genai.configure(api_key=llm_cfg.api_key)
-        system_prompt = settings_service.build_system_prompt(memory_context)
+        system_prompt = settings_service.build_system_prompt(memory_context, inner_life_context)
 
         model = genai.GenerativeModel(
             model_name=llm_cfg.model,
@@ -176,7 +179,8 @@ class LLMService:
         return reply
 
     # ─── OpenAI Compatible (Kimi / DeepSeek / OpenAI / etc.) ───
-    async def _chat_openai_compatible(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] = []) -> str:
+    async def _chat_openai_compatible(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None) -> str:
+        attachments = attachments or []
         from openai import AsyncOpenAI
 
         llm_cfg = settings_service.settings.api.llm

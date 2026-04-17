@@ -19,6 +19,7 @@ from memory import (
     delete_conversations as db_delete_conversations,
     get_user_profile,
     update_user_profile,
+    save_conversation_message,
 )
 import asyncio
 from ennoia import ennoia
@@ -120,9 +121,16 @@ async def chat(request: ChatRequest):
             id=job_id,
             replace_existing=True,
         )
-        return ChatResponse.create(
-            content=f"已安排 {task_type}，将在 {run_time.strftime('%Y-%m-%d %H:%M')} 执行。"
-        )
+        reply_text = f"已安排 {task_type}，将在 {run_time.strftime('%Y-%m-%d %H:%M')} 执行。"
+        memory_service.record_message(request.message, role="user")
+        try:
+            ennoia.on_user_message(quality="casual")
+        except Exception as e:
+            print(f"[Ennoia] on_user_message error: {e}")
+        if request.conversation_id:
+            save_conversation_message(request.conversation_id, "user", request.message)
+            save_conversation_message(request.conversation_id, "assistant", reply_text)
+        return ChatResponse.create(content=reply_text)
 
     try:
         reply = await llm_service.chat(
@@ -430,9 +438,6 @@ async def api_toggle_todo(todo_id: int, body: dict):
 # ════════════════════════════════════════
 #  Debug
 # ════════════════════════════════════════
-
-_last_chat_error: dict | None = None
-
 
 @app.get("/api/debug/last-chat-error")
 async def debug_last_chat_error():

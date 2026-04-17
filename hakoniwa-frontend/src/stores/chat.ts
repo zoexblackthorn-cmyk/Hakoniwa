@@ -103,7 +103,14 @@ export const useChatStore = defineStore('chat', () => {
           content: m.content,
           timestamp: new Date(m.timestamp),
           status: 'sent' as const,
-          attachments: m.metadata ? JSON.parse(m.metadata)?.attachments : undefined
+          attachments: (() => {
+            if (!m.metadata) return undefined
+            try {
+              return JSON.parse(m.metadata)?.attachments
+            } catch {
+              return undefined
+            }
+          })()
         }))
       }
     } catch (e) {
@@ -129,7 +136,14 @@ export const useChatStore = defineStore('chat', () => {
         content: m.content,
         timestamp: new Date(m.timestamp),
         status: 'sent' as const,
-        attachments: m.metadata ? JSON.parse(m.metadata)?.attachments : undefined
+        attachments: (() => {
+          if (!m.metadata) return undefined
+          try {
+            return JSON.parse(m.metadata)?.attachments
+          } catch {
+            return undefined
+          }
+        })()
       }))
     } catch (e) {
       error.value = e instanceof Error ? e.message : '加载消息失败'
