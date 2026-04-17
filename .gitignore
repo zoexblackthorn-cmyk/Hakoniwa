@@ -44,3 +44,4 @@ hakoniwa-backend/data/
 *.tmp
 *.temp
 hakoniwa-backend/settings.json
+frontend design/
