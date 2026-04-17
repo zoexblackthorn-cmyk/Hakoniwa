@@ -21,7 +21,6 @@ const menuDrawerOpen = ref(false)
 const backgroundImage = ref<string | null>(null)
 
 onMounted(() => {
-  chatStore.loadRecentConversation()
   if (chatStore.conversationId) {
     const saved = localStorage.getItem(`chat-bg-${chatStore.conversationId}`)
     if (saved) backgroundImage.value = saved
@@ -97,9 +96,16 @@ function onSetBackground() {
             @click="shell.toggleCharacterCard()"
           >
             <img
+              v-if="!settingsStore.loading && settingsStore.settings.character?.avatar_path"
+              :src="settingsStore.settings.character.avatar_path"
+              alt="Ansel"
+            />
+            <img
+              v-else-if="!settingsStore.loading"
               :src="anselAvatar"
               alt="Ansel"
             />
+            <div v-else class="avatar-skeleton" />
           </button>
         </div>
         <button class="header-btn close-btn" @click="shell.toggleDrawer('chat')">
@@ -198,6 +204,19 @@ function onSetBackground() {
     height: 100%;
     object-fit: cover;
   }
+}
+
+.avatar-skeleton {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(200, 220, 240, 0.5);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
 }
 
 .chat-messages {

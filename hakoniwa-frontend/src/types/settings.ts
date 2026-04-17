@@ -42,10 +42,15 @@ export interface ThemeSettings {
   skin: string
 }
 
+export interface SystemPromptSettings {
+  base: string
+}
+
 export interface Settings {
   character: CharacterSettings
   api: ApiSettings
   theme: ThemeSettings
+  system_prompt: SystemPromptSettings
 }
 
 export interface ModelsResponse {

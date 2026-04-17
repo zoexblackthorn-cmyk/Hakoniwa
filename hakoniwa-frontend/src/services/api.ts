@@ -3,6 +3,7 @@ const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000'
 export interface ChatRequest {
   message: string
   conversation_id?: string
+  attachments?: string[]
 }
 
 export interface ChatResponse {

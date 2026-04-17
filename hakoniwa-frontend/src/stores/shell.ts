@@ -16,6 +16,7 @@ export const useShellStore = defineStore('shell', () => {
   const userCardOpen = ref(false)
   const characterCardOpen = ref(false)
   const notifyOpen = ref(false)
+  const notifyCount = ref(0)
   const widgetsVisible = ref(false)
 
   // 动态 z-index 管理：最后打开的永远在最上层
@@ -51,6 +52,10 @@ export const useShellStore = defineStore('shell', () => {
     if (notifyOpen.value) bringToFront('notify')
   }
 
+  function setNotifyCount(count: number) {
+    notifyCount.value = count
+  }
+
   function goHome() {
     activeDrawer.value = null
     userCardOpen.value = false
@@ -80,9 +85,9 @@ export const useShellStore = defineStore('shell', () => {
   }
 
   return {
-    activeDrawer, userCardOpen, characterCardOpen, notifyOpen,
+    activeDrawer, userCardOpen, characterCardOpen, notifyOpen, notifyCount,
     anyOverlayOpen, widgetsVisible, overlayZ,
-    toggleDrawer, toggleUserCard, toggleCharacterCard, toggleNotify,
+    toggleDrawer, toggleUserCard, toggleCharacterCard, toggleNotify, setNotifyCount,
     goHome, toggleHome, closeTop, bringToFront, getZ,
   }
 })

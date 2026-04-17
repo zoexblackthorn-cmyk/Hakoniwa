@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/stores/settings'
 import OverlayContainer from './OverlayContainer.vue'
 import { X, Search, Heart, SlidersHorizontal, FileText, LayoutGrid, Cloud, Trash2 } from 'lucide-vue-next'
 import DebugPanel from '@/components/debug/DebugPanel.vue'
+import SystemPromptPanel from '@/components/settings/SystemPromptPanel.vue'
 
 const shell = useShellStore()
 const settingsStore = useSettingsStore()
@@ -16,7 +17,7 @@ const selectedSub = ref('llm')
 
 const searchQuery = ref('')
 
-// 本地表单状态（仅 LLM）
+// 本地表单状态
 const llmForm = reactive({
   provider: 'gemini',
   api_key: '',
@@ -24,9 +25,23 @@ const llmForm = reactive({
   base_url: ''
 })
 
+const ttsForm = reactive({
+  provider: '',
+  api_key: '',
+  voice_id: '',
+  base_url: ''
+})
+
+const searchForm = reactive({
+  provider: 'brave',
+  api_key: ''
+})
+
 const llmModels = ref<string[]>([])
 const llmLoadingModels = ref(false)
 const maskedPlaceholder = ref('')
+const maskedPlaceholderTts = ref('')
+const maskedPlaceholderSearch = ref('')
 
 function maskKey(key: string): string {
   if (!key || key.length <= 8) return key
@@ -47,6 +62,22 @@ function resetLlmForm() {
   llmForm.api_key = s.api.llm.api_key ? maskedPlaceholder.value : ''
 }
 
+function resetTtsForm() {
+  const s = settingsStore.settings
+  ttsForm.provider = s.api.tts.provider
+  ttsForm.voice_id = s.api.tts.voice_id
+  ttsForm.base_url = s.api.tts.base_url
+  maskedPlaceholderTts.value = maskKey(s.api.tts.api_key)
+  ttsForm.api_key = s.api.tts.api_key ? maskedPlaceholderTts.value : ''
+}
+
+function resetSearchForm() {
+  const s = settingsStore.settings
+  searchForm.provider = s.api.search.provider || 'brave'
+  maskedPlaceholderSearch.value = maskKey(s.api.search.api_key)
+  searchForm.api_key = s.api.search.api_key ? maskedPlaceholderSearch.value : ''
+}
+
 async function loadLlmModels() {
   if (!llmForm.provider) return
   llmLoadingModels.value = true
@@ -62,6 +93,8 @@ watch(() => llmForm.provider, () => {
 onMounted(() => {
   settingsStore.fetchSettings().then(() => {
     resetLlmForm()
+    resetTtsForm()
+    resetSearchForm()
     loadLlmModels()
   })
 })
@@ -86,6 +119,44 @@ async function onSaveLlm() {
   resetLlmForm()
 }
 
+async function onSaveTts() {
+  const payload: any = {
+    provider: ttsForm.provider,
+    voice_id: ttsForm.voice_id,
+    base_url: ttsForm.base_url,
+  }
+  if (isKeyChanged(ttsForm.api_key, maskedPlaceholderTts.value)) {
+    payload.api_key = ttsForm.api_key
+  }
+  await settingsStore.saveSettings({
+    api: {
+      llm: settingsStore.settings.api.llm,
+      tts: payload,
+      search: settingsStore.settings.api.search,
+      image_gen: settingsStore.settings.api.image_gen,
+    }
+  })
+  resetTtsForm()
+}
+
+async function onSaveSearch() {
+  const payload: any = {
+    provider: searchForm.provider,
+  }
+  if (isKeyChanged(searchForm.api_key, maskedPlaceholderSearch.value)) {
+    payload.api_key = searchForm.api_key
+  }
+  await settingsStore.saveSettings({
+    api: {
+      llm: settingsStore.settings.api.llm,
+      tts: settingsStore.settings.api.tts,
+      search: payload,
+      image_gen: settingsStore.settings.api.image_gen,
+    }
+  })
+  resetSearchForm()
+}
+
 const navItems = [
   {
     key: 'heartbeat',
@@ -106,7 +177,14 @@ const navItems = [
       { key: 'more', label: '...' },
     ]
   },
-  { key: 'system_prompt', label: 'System Prompt', icon: FileText },
+  {
+    key: 'system_prompt',
+    label: 'System Prompt',
+    icon: FileText,
+    children: [
+      { key: 'base', label: 'Base' }
+    ]
+  },
   { key: 'logs', label: 'Logs', icon: LayoutGrid },
   { key: 'record', label: 'Record', icon: Cloud },
   { key: 'data_erasure', label: 'Data Erasure', icon: Trash2 },
@@ -177,7 +255,7 @@ function toggleExpand(key: string) {
 
         <!-- 右栏 -->
         <main class="settings-content">
-          <!-- API → LLM 真实功能 -->
+          <!-- API → LLM -->
           <template v-if="selectedGroup === 'api' && selectedSub === 'llm'">
             <h3 class="content-title">API / LLM</h3>
             <div class="form-fields">
@@ -232,8 +310,97 @@ function toggleExpand(key: string) {
             </button>
           </template>
 
-            <!-- Heartbeat → Debug -->
-          <template v-if="selectedGroup === 'heartbeat' && selectedSub === 'debug'">
+          <!-- API → TTS -->
+          <template v-else-if="selectedGroup === 'api' && selectedSub === 'tts'">
+            <h3 class="content-title">API / TTS</h3>
+            <div class="form-fields">
+              <div class="field">
+                <label>Provider</label>
+                <select v-model="ttsForm.provider" class="input-like">
+                  <option value="">-- 未配置 --</option>
+                  <option value="openai">OpenAI / 兼容</option>
+                  <option value="edge-tts">Edge TTS (免费)</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label>API Key</label>
+                <input
+                  v-model="ttsForm.api_key"
+                  type="password"
+                  class="input-like"
+                  placeholder="输入 API Key"
+                />
+              </div>
+
+              <div class="field">
+                <label>Voice ID</label>
+                <input
+                  v-model="ttsForm.voice_id"
+                  type="text"
+                  class="input-like"
+                  placeholder="例如：alloy / zh-CN-XiaoxiaoNeural"
+                />
+              </div>
+
+              <div class="field">
+                <label>Base URL（可选）</label>
+                <input
+                  v-model="ttsForm.base_url"
+                  type="text"
+                  class="input-like"
+                  placeholder="https://api.example.com/v1"
+                />
+              </div>
+            </div>
+
+            <button
+              class="save-btn"
+              :disabled="settingsStore.saving"
+              @click="onSaveTts"
+            >
+              {{ settingsStore.saving ? 'Saving...' : 'Save' }}
+            </button>
+          </template>
+
+          <!-- API → Search -->
+          <template v-else-if="selectedGroup === 'api' && selectedSub === 'search'">
+            <h3 class="content-title">API / Search</h3>
+            <div class="form-fields">
+              <div class="field">
+                <label>Provider</label>
+                <select v-model="searchForm.provider" class="input-like">
+                  <option value="brave">Brave Search</option>
+                </select>
+              </div>
+
+              <div class="field">
+                <label>API Key</label>
+                <input
+                  v-model="searchForm.api_key"
+                  type="password"
+                  class="input-like"
+                  placeholder="输入 Brave API Key"
+                />
+              </div>
+            </div>
+
+            <button
+              class="save-btn"
+              :disabled="settingsStore.saving"
+              @click="onSaveSearch"
+            >
+              {{ settingsStore.saving ? 'Saving...' : 'Save' }}
+            </button>
+          </template>
+
+          <!-- System Prompt → Base -->
+          <template v-else-if="selectedGroup === 'system_prompt' && selectedSub === 'base'">
+            <SystemPromptPanel />
+          </template>
+
+          <!-- Heartbeat → Debug -->
+          <template v-else-if="selectedGroup === 'heartbeat' && selectedSub === 'debug'">
             <DebugPanel />
           </template>
 

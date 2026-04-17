@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useShellStore } from '@/stores/shell'
 import { useSettingsStore } from '@/stores/settings'
 import { fetchEnnoiaState, fetchEnnoiaDesires, fetchEnnoiaActivities } from '@/services/ennoia'
@@ -50,6 +50,11 @@ const bubbles = computed(() => [
   { id: 4, text: '', avatarSide: 'right', style: { top: '48%', right: '6%', width: '48%', height: '26%' }, featured: true },
   { id: 5, text: bubbleTexts.value.b5, avatarSide: 'left', style: { top: '72%', left: '4%', width: '38%', height: '16%' } },
 ])
+
+// 同步有效通知数量到 shell store（排除 coming soon 占位）
+watch(bubbles, (val) => {
+  shell.setNotifyCount(val.filter(b => !b.featured).length)
+}, { immediate: true })
 </script>
 
 <template>

@@ -1,12 +1,17 @@
 from typing import Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 import config
-from models.chat import ChatRequest, ChatResponse, HealthResponse
+from models.chat import ChatRequest, ChatResponse, HealthResponse, TTSRequest, SearchResponse
 from models.settings import AppSettings
 from services.llm import llm_service
 from services.settings import settings_service
 from services.model_providers import ProviderRegistry, fetch_models
+from services.tts import tts_service
+from services.search import search_service
+from services.scheduler_service import scheduler, start_scheduler
+from services.time_aware import detect_schedule_intent
 from memory import (
     get_conversations,
     get_conversation_messages,
@@ -39,6 +44,49 @@ app.add_middleware(
 
 
 # ════════════════════════════════════════
+#  System Prompt
+# ════════════════════════════════════════
+
+@app.get("/api/system-prompt")
+async def get_system_prompt():
+    """获取当前使用的底层 system prompt（用户设置优先，未设置则回退到默认）"""
+    base = settings_service.settings.system_prompt.base.strip()
+    if not base:
+        base = config.BASE_SYSTEM_PROMPT
+    return {"base": base}
+
+
+# ════════════════════════════════════════
+#  TTS
+# ════════════════════════════════════════
+
+@app.post("/api/tts")
+async def tts(request: TTSRequest):
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="文本不能为空")
+    try:
+        stream = await tts_service.synthesize(request.text, request.voice_id)
+        return StreamingResponse(stream, media_type="audio/mpeg")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════
+#  Search
+# ════════════════════════════════════════
+
+@app.get("/api/search", response_model=SearchResponse)
+async def search(q: str = Query(..., description="搜索关键词")):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="搜索词不能为空")
+    try:
+        results = search_service.search(q)
+        return SearchResponse(results=results)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════
 #  健康检查
 # ════════════════════════════════════════
 
@@ -55,13 +103,32 @@ async def health_check():
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     global _last_chat_error
-    if not request.message.strip():
+
+    if not request.message.strip() and not request.attachments:
         raise HTTPException(status_code=400, detail="消息不能为空")
+
+    # ── 调度意图拦截（零 token，规则匹配）──
+    is_task, task_type, run_time, task_content = detect_schedule_intent(request.message)
+    if is_task:
+        from services.task_handler import handle_task
+        job_id = f"task-{datetime.now().timestamp()}-{id(request)}"
+        scheduler.add_job(
+            handle_task,
+            "date",
+            run_date=run_time,
+            args=[task_type, task_content],
+            id=job_id,
+            replace_existing=True,
+        )
+        return ChatResponse.create(
+            content=f"已安排 {task_type}，将在 {run_time.strftime('%Y-%m-%d %H:%M')} 执行。"
+        )
 
     try:
         reply = await llm_service.chat(
             message=request.message,
             conversation_id=request.conversation_id,
+            attachments=request.attachments,
         )
         return ChatResponse.create(content=reply)
     except Exception as e:
@@ -242,6 +309,7 @@ async def _tick_loop():
 async def on_startup():
     global _tick_task
     _tick_task = asyncio.create_task(_tick_loop())
+    start_scheduler()
     print("🧠 Ennoia tick scheduler started (every 30s)")
 
 

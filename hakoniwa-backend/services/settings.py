@@ -112,7 +112,10 @@ class SettingsService:
     def build_system_prompt(self, memory_context: str = "", inner_life_context: str = "") -> str:
         """组装最终 system prompt：底层 + soul + mask + personalization + memory + inner life"""
         s = self.settings.character
-        parts = [config.BASE_SYSTEM_PROMPT]
+        base_prompt = self.settings.system_prompt.base.strip()
+        if not base_prompt:
+            base_prompt = config.BASE_SYSTEM_PROMPT
+        parts = [base_prompt]
 
         if s.soul.strip():
             parts.append(f"\n\n## 你是谁（Soul）\n{s.soul}")
@@ -138,6 +141,11 @@ class SettingsService:
             parts.append(f"## 你对用户的了解（Memory）\n{memory_context}")
         if inner_life_context.strip():
             parts.append(f"\n\n## 你的内在状态（Inner Life）\n{inner_life_context}")
+
+        # 注入当前精确时间
+        from datetime import datetime
+        now = datetime.now()
+        parts.append(f"\n\nCurrent time: {now.strftime('%Y-%m-%d %H:%M')} {now.astimezone().tzinfo}")
 
         return "".join(parts)
     @staticmethod

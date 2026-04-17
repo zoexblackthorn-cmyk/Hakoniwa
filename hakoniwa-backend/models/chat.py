@@ -7,6 +7,7 @@ class ChatRequest(BaseModel):
     """聊天请求"""
     message: str
     conversation_id: Optional[str] = None
+    attachments: list[str] = []
 
 
 class ChatResponse(BaseModel):
@@ -31,3 +32,21 @@ class HealthResponse(BaseModel):
     """健康检查响应"""
     status: str = "ok"
     model: str = ""
+
+
+class TTSRequest(BaseModel):
+    """TTS 请求"""
+    text: str
+    voice_id: Optional[str] = None
+
+
+class SearchResultItem(BaseModel):
+    """搜索结果条目"""
+    title: str
+    url: str
+    description: str
+
+
+class SearchResponse(BaseModel):
+    """搜索响应"""
+    results: list[SearchResultItem]

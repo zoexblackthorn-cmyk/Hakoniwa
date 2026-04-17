@@ -3,6 +3,8 @@ import { onMounted, onUnmounted } from 'vue'
 import { useBreakpoint } from '@/composables/useBreakpoint'
 import { useShellStore } from '@/stores/shell'
 import { useUserProfileStore } from '@/stores/userProfile'
+import { useChatStore } from '@/stores/chat'
+import { useSettingsStore } from '@/stores/settings'
 import DesktopBackground from './DesktopBackground.vue'
 import SideNav from './SideNav.vue'
 import MobileTabBar from './MobileTabBar.vue'
@@ -16,9 +18,13 @@ import HomeWidgets from './home/HomeWidgets.vue'
 const { isDesktop } = useBreakpoint()
 const shell = useShellStore()
 const userProfile = useUserProfileStore()
+const chatStore = useChatStore()
+const settingsStore = useSettingsStore()
 
 onMounted(() => {
   userProfile.load()
+  chatStore.loadRecentConversation()
+  settingsStore.fetchSettings()
   window.addEventListener('keydown', onKey)
 })
 onUnmounted(() => window.removeEventListener('keydown', onKey))

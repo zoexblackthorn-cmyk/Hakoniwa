@@ -53,9 +53,11 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       // 4. 调用 API
+      const attachmentUrls = attachments?.map(a => a.url) || []
       const response = await sendMessage({
         message: content,
-        conversation_id: conversationId.value || undefined
+        conversation_id: conversationId.value || undefined,
+        attachments: attachmentUrls.length > 0 ? attachmentUrls : undefined
       })
 
       // 5. 更新占位消息为真实回复
@@ -100,7 +102,8 @@ export const useChatStore = defineStore('chat', () => {
           role: m.role as 'user' | 'assistant',
           content: m.content,
           timestamp: new Date(m.timestamp),
-          status: 'sent' as const
+          status: 'sent' as const,
+          attachments: m.metadata ? JSON.parse(m.metadata)?.attachments : undefined
         }))
       }
     } catch (e) {
@@ -125,7 +128,8 @@ export const useChatStore = defineStore('chat', () => {
         role: m.role as 'user' | 'assistant',
         content: m.content,
         timestamp: new Date(m.timestamp),
-        status: 'sent' as const
+        status: 'sent' as const,
+        attachments: m.metadata ? JSON.parse(m.metadata)?.attachments : undefined
       }))
     } catch (e) {
       error.value = e instanceof Error ? e.message : '加载消息失败'

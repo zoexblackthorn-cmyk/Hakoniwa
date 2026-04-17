@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, computed } from 'vue'
+import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import type { Message } from '@/types/message'
 import MessageBubble from './MessageBubble.vue'
@@ -7,18 +7,27 @@ import MessageBubble from './MessageBubble.vue'
 const chatStore = useChatStore()
 const listRef = ref<HTMLElement | null>(null)
 
+async function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
+  await nextTick()
+  if (listRef.value) {
+    listRef.value.scrollTo({
+      top: listRef.value.scrollHeight,
+      behavior
+    })
+  }
+}
+
+// 组件挂载时：如果消息已存在（从 AppShell 预加载），直接滚到底部
+onMounted(() => {
+  if (chatStore.messages.length > 0) {
+    scrollToBottom('auto')
+  }
+})
+
 // 消息变化时自动滚动到底部
 watch(
   () => chatStore.messages.length,
-  async () => {
-    await nextTick()
-    if (listRef.value) {
-      listRef.value.scrollTo({
-        top: listRef.value.scrollHeight,
-        behavior: 'smooth'
-      })
-    }
-  }
+  () => scrollToBottom('smooth')
 )
 
 interface GroupedItem {

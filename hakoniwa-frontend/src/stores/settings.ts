@@ -36,6 +36,9 @@ const defaultSettings: Settings = {
   theme: {
     dark_mode: false,
     skin: 'default'
+  },
+  system_prompt: {
+    base: ''
   }
 }
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Message } from '@/types/message'
 import Avatar from './Avatar.vue'
 import { RotateCcw, Copy, Edit3 } from 'lucide-vue-next'
@@ -8,6 +9,26 @@ const props = defineProps<{
 }>()
 
 const isAssistant = props.message.role === 'assistant'
+
+const hasAttachments = computed(() => {
+  const a = (props.message as any).attachments
+  return Array.isArray(a) && a.length > 0
+})
+
+const normalizedAttachments = computed(() => {
+  const a = (props.message as any).attachments
+  if (!Array.isArray(a)) return []
+  return a.map((att: any, i: number) => {
+    if (typeof att === 'string') {
+      return { url: att, name: '', key: `${i}-${att.slice(0, 20)}` }
+    }
+    return {
+      url: att.url || '',
+      name: att.name || '',
+      key: `${i}-${(att.url || '').slice(0, 20)}`
+    }
+  })
+})
 
 function onCopy() {
   navigator.clipboard.writeText(props.message.content)
@@ -42,11 +63,11 @@ function formatTime(date: Date): string {
         <p v-if="message.status === 'sending'" class="content loading-dots">
           <span></span><span></span><span></span>
         </p>
-        <p v-else class="content">{{ message.content }}</p>
-        <div v-if="message.attachments && message.attachments.length" class="attachments">
+        <p v-else-if="message.content" class="content">{{ message.content }}</p>
+        <div v-if="hasAttachments" class="attachments">
           <img
-            v-for="att in message.attachments"
-            :key="att.url"
+            v-for="att in normalizedAttachments"
+            :key="att.key"
             :src="att.url"
             :alt="att.name"
             class="attachment-img"
@@ -112,13 +133,13 @@ function formatTime(date: Date): string {
 }
 
 .bubble {
-  padding: 13px 20px;
+  padding: 10px 16px;
   border-radius: 22px;
   border: none;
   font-size: 14px;
   line-height: 1.5;
   word-break: break-word;
-  min-width: 120px;
+  min-width: 20px;
   box-shadow: 0 2px 10px rgba(120, 170, 210, 0.12);
 
   /* assistant bubble — mid blue, slightly deeper */
@@ -159,6 +180,8 @@ function formatTime(date: Date): string {
 .attachment-img {
   max-width: 200px;
   max-height: 200px;
+  min-width: 80px;
+  min-height: 80px;
   border-radius: 12px;
   object-fit: cover;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);

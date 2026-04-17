@@ -19,7 +19,7 @@ function onSend() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault()
     onSend()
   }
@@ -31,20 +31,27 @@ function onAttachClick() {
   fileInputRef.value?.click()
 }
 
-function onFileChange(e: Event) {
+async function onFileChange(e: Event) {
   const files = (e.target as HTMLInputElement).files
   if (!files) return
 
+  const newAttachments: Attachment[] = []
   for (const file of Array.from(files)) {
     if (file.type.startsWith('image/')) {
-      const url = URL.createObjectURL(file)
-      pendingAttachments.value.push({
+      const dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = (ev) => resolve(ev.target?.result as string)
+        reader.readAsDataURL(file)
+      })
+      newAttachments.push({
         type: 'image',
-        url,
+        url: dataUrl,
         name: file.name
       })
     }
   }
+
+  pendingAttachments.value.push(...newAttachments)
 
   // 如果有文件且没有输入文字，自动发送
   if (pendingAttachments.value.length > 0 && !inputValue.value.trim()) {
@@ -58,8 +65,6 @@ function onFileChange(e: Event) {
 }
 
 function removeAttachment(index: number) {
-  const att = pendingAttachments.value[index]
-  if (att) URL.revokeObjectURL(att.url)
   pendingAttachments.value.splice(index, 1)
 }
 </script>

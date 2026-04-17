@@ -53,8 +53,14 @@ class ThemeSettings(BaseModel):
     skin: str = "default"
 
 
+class SystemPromptSettings(BaseModel):
+    """System Prompt 配置"""
+    base: str = ""  # 底层 prompt（留空则用 config.BASE_SYSTEM_PROMPT）
+
+
 class AppSettings(BaseModel):
     """完整应用设置"""
     character: CharacterSettings = CharacterSettings()
     api: APISettings = APISettings()
     theme: ThemeSettings = ThemeSettings()
+    system_prompt: SystemPromptSettings = SystemPromptSettings()

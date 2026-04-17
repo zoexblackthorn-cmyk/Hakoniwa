@@ -29,3 +29,15 @@ export async function getModels(provider: string): Promise<ModelsResponse> {
   }
   return res.json()
 }
+
+export interface SystemPromptResponse {
+  base: string
+}
+
+export async function getSystemPrompt(): Promise<SystemPromptResponse> {
+  const res = await fetch(`${API_BASE}/api/system-prompt`)
+  if (!res.ok) {
+    throw new Error(`API Error: ${res.status}`)
+  }
+  return res.json()
+}

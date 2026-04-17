@@ -17,10 +17,18 @@ const userStore = useUserProfileStore()
     <div class="nav-section top">
       <button class="nav-btn avatar-btn" title="用户资料" @click="shell.toggleUserCard()">
         <img
-          :src="userStore.profile?.avatar_path || 'https://api.dicebear.com/7.x/notionists/svg?seed=Zoe'"
+          v-if="!userStore.loading && userStore.profile?.avatar_path"
+          :src="userStore.profile.avatar_path"
           alt="user"
           class="avatar-img"
         />
+        <img
+          v-else-if="!userStore.loading"
+          :src="'https://api.dicebear.com/7.x/notionists/svg?seed=Zoe'"
+          alt="user"
+          class="avatar-img"
+        />
+        <div v-else class="avatar-skeleton" />
       </button>
     </div>
 
@@ -59,7 +67,7 @@ const userStore = useUserProfileStore()
         @click="shell.toggleNotify()"
       >
         <Bell class="icon" :size="22" />
-        <span class="badge">06</span>
+        <span v-if="shell.notifyCount > 0" class="badge">{{ String(shell.notifyCount).padStart(2, '0') }}</span>
       </button>
     </div>
 
@@ -182,6 +190,19 @@ const userStore = useUserProfileStore()
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.avatar-skeleton {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.45);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.9; }
 }
 
 .notify-btn {
