@@ -7,7 +7,8 @@ const defaultSettings: Settings = {
   character: {
     soul: '',
     mask: '',
-    personalization: ''
+    personalization: '',
+    avatar_path: ''
   },
   api: {
     llm: {

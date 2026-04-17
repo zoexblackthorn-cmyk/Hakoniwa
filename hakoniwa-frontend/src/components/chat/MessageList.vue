@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
+import type { Message } from '@/types/message'
 import MessageBubble from './MessageBubble.vue'
 
 const chatStore = useChatStore()
@@ -19,6 +20,41 @@ watch(
     }
   }
 )
+
+interface GroupedItem {
+  type: 'date' | 'message'
+  date?: Date
+  label?: string
+  message?: Message
+}
+
+const groupedItems = computed<GroupedItem[]>(() => {
+  const items: GroupedItem[] = []
+  let lastDateLabel = ''
+
+  for (const msg of chatStore.messages) {
+    const label = formatDateLabel(msg.timestamp)
+    if (label !== lastDateLabel) {
+      items.push({ type: 'date', label, date: msg.timestamp })
+      lastDateLabel = label
+    }
+    items.push({ type: 'message', message: msg })
+  }
+
+  return items
+})
+
+function formatDateLabel(date: Date): string {
+  const now = new Date()
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  if (d.getTime() === today.getTime()) return 'Today'
+  if (d.getTime() === yesterday.getTime()) return 'Yesterday'
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
 </script>
 
 <template>
@@ -27,11 +63,17 @@ watch(
       <span class="empty-icon">💬</span>
       <p>和 Ansel 开始聊天吧</p>
     </div>
-    <MessageBubble
-      v-for="msg in chatStore.messages"
-      :key="msg.id"
-      :message="msg"
-    />
+    <template v-else>
+      <template v-for="(item, index) in groupedItems" :key="index">
+        <div v-if="item.type === 'date'" class="date-divider">
+          <span class="date-pill">{{ item.label }}</span>
+        </div>
+        <MessageBubble
+          v-else-if="item.message"
+          :message="item.message"
+        />
+      </template>
+    </template>
   </div>
 </template>
 
@@ -39,7 +81,7 @@ watch(
 .message-list {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 20px 18px 12px;
   display: flex;
   flex-direction: column;
 }
@@ -61,5 +103,22 @@ watch(
     font-size: 14px;
     margin: 0;
   }
+}
+
+.date-divider {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0;
+}
+
+.date-pill {
+  background: #ffffff;
+  color: #5E7E93;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 22px;
+  border-radius: 999px;
+  box-shadow: 0 3px 10px rgba(120, 170, 210, 0.15);
+  letter-spacing: 0.02em;
 }
 </style>

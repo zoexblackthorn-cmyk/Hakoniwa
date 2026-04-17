@@ -19,7 +19,7 @@ const tabs = [
 
 // 本地表单状态
 const form = reactive<Settings>({
-  character: { soul: '', mask: '', personalization: '' },
+  character: { soul: '', mask: '', personalization: '', avatar_path: '' },
   api: {
     llm: { provider: 'gemini', api_key: '', model: '', base_url: '' },
     tts: { provider: '', api_key: '', voice_id: '', base_url: '' },
@@ -88,45 +88,49 @@ async function onSaveCharacter() {
 }
 
 async function onSaveApi() {
-  const payload: Partial<Settings> = { api: { ...form.api } }
-
-  // 处理 API key：如果没修改，不提交（避免用掩码覆盖真实 key）
-  if (!isKeyChanged(form.api.llm.api_key, maskedPlaceholders.llm)) {
-    delete (payload.api as any).llm
-  } else {
-    payload.api!.llm = { ...form.api.llm }
+  // 构造要发送的 llm / tts / search / image_gen 对象，始终发送所有非 key 字段
+  const llmToSend: any = {
+    provider: form.api.llm.provider,
+    model: form.api.llm.model,
+    base_url: form.api.llm.base_url,
+  }
+  // 只在 api_key 真的改了的时候才发送它，避免把掩码当成新 key
+  if (isKeyChanged(form.api.llm.api_key, maskedPlaceholders.llm)) {
+    llmToSend.api_key = form.api.llm.api_key
   }
 
-  if (!isKeyChanged(form.api.tts.api_key, maskedPlaceholders.tts)) {
-    if (payload.api) delete (payload.api as any).tts
-  } else {
-    if (!payload.api) (payload as any).api = { ...form.api }
-    else payload.api.tts = { ...form.api.tts }
+  const ttsToSend: any = {
+    provider: form.api.tts.provider,
+    voice_id: form.api.tts.voice_id,
+    base_url: form.api.tts.base_url,
+  }
+  if (isKeyChanged(form.api.tts.api_key, maskedPlaceholders.tts)) {
+    ttsToSend.api_key = form.api.tts.api_key
   }
 
-  if (!isKeyChanged(form.api.search.api_key, maskedPlaceholders.search)) {
-    if (payload.api) delete (payload.api as any).search
-  } else {
-    if (!payload.api) (payload as any).api = { ...form.api }
-    else payload.api.search = { ...form.api.search }
+  const searchToSend: any = {
+    provider: form.api.search.provider,
+  }
+  if (isKeyChanged(form.api.search.api_key, maskedPlaceholders.search)) {
+    searchToSend.api_key = form.api.search.api_key
   }
 
-  if (!isKeyChanged(form.api.image_gen.api_key, maskedPlaceholders.image_gen)) {
-    if (payload.api) delete (payload.api as any).image_gen
-  } else {
-    if (!payload.api) (payload as any).api = { ...form.api }
-    else payload.api.image_gen = { ...form.api.image_gen }
+  const imageGenToSend: any = {
+    provider: form.api.image_gen.provider,
+    model: form.api.image_gen.model,
+  }
+  if (isKeyChanged(form.api.image_gen.api_key, maskedPlaceholders.image_gen)) {
+    imageGenToSend.api_key = form.api.image_gen.api_key
   }
 
-  // 如果只有部分字段，构造完整 api 对象
-  if (payload.api) {
-    const api: any = {}
-    if ((payload.api as any).llm) api.llm = (payload.api as any).llm
-    if ((payload.api as any).tts) api.tts = (payload.api as any).tts
-    if ((payload.api as any).search) api.search = (payload.api as any).search
-    if ((payload.api as any).image_gen) api.image_gen = (payload.api as any).image_gen
-    await settingsStore.saveSettings({ api })
-  }
+  await settingsStore.saveSettings({
+    api: {
+      llm: llmToSend,
+      tts: ttsToSend,
+      search: searchToSend,
+      image_gen: imageGenToSend,
+    },
+  })
 
   resetForm()
 }

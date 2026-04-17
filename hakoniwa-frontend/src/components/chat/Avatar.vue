@@ -1,12 +1,26 @@
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue'
+import { useUserProfileStore } from '@/stores/userProfile'
+import { useSettingsStore } from '@/stores/settings'
+
+const props = defineProps<{
   role: 'user' | 'assistant'
 }>()
+
+const userStore = useUserProfileStore()
+const settingsStore = useSettingsStore()
+
+const src = computed(() => {
+  if (props.role === 'user') {
+    return userStore.profile?.avatar_path || 'https://api.dicebear.com/7.x/notionists/svg?seed=Zoe'
+  }
+  return settingsStore.settings.character?.avatar_path || 'https://api.dicebear.com/7.x/notionists/svg?seed=Ansel'
+})
 </script>
 
 <template>
   <div class="avatar" :class="role">
-    <span class="avatar-icon">{{ role === 'assistant' ? '👼' : '😊' }}</span>
+    <img :src="src" class="avatar-img" />
   </div>
 </template>
 
@@ -21,6 +35,7 @@ defineProps<{
   flex-shrink: 0;
   border: 2px solid #d0e6f4;
   background: #ffffff;
+  overflow: hidden;
 
   &.assistant {
     background: #f5fbff;
@@ -33,8 +48,9 @@ defineProps<{
   }
 }
 
-.avatar-icon {
-  font-size: 20px;
-  line-height: 1;
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 </style>

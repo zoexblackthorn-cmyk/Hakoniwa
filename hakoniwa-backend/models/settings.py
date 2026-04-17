@@ -7,6 +7,7 @@ class CharacterSettings(BaseModel):
     soul: str = ""             # AI 的人设
     mask: str = ""             # AI 眼中的用户
     personalization: str = ""  # 用户喜好
+    avatar_path: str = ""      # 角色头像
 
 
 class LLMSettings(BaseModel):

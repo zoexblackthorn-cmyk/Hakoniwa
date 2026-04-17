@@ -188,6 +188,26 @@ def init_db():
             FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
         );
         
+        -- 用户档案表
+        CREATE TABLE IF NOT EXISTS user_profile (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            name TEXT DEFAULT '',
+            status_line TEXT DEFAULT '',
+            avatar_path TEXT DEFAULT '',
+            mask TEXT DEFAULT '',
+            profession TEXT DEFAULT '',
+            personalization TEXT DEFAULT '',
+            updated_at TEXT
+        );
+        
+        -- Todo 列表
+        CREATE TABLE IF NOT EXISTS todos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT NOT NULL,
+            completed INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        
         -- 索引
         CREATE INDEX IF NOT EXISTS idx_events_timestamp ON events(timestamp);
         CREATE INDEX IF NOT EXISTS idx_events_type ON events(type);
@@ -199,6 +219,13 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_conversation_messages_timestamp ON conversation_messages(timestamp);
     """)
     conn.commit()
+    
+    # ── 迁移：为已存在的 user_profile 表补全 avatar_path 列 ──
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(user_profile)").fetchall()]
+    if 'avatar_path' not in cols:
+        conn.execute("ALTER TABLE user_profile ADD COLUMN avatar_path TEXT DEFAULT ''")
+        conn.commit()
+    
     conn.close()
 
 
@@ -594,6 +621,99 @@ def delete_conversations(conversation_ids: list[str]) -> int:
     conn.commit()
     conn.close()
     return affected
+
+
+# ============ 用户档案 ============
+
+def get_user_profile() -> dict:
+    """获取用户档案。如果不存在，从 settings.character 迁移。"""
+    conn = get_db()
+    row = conn.execute("SELECT * FROM user_profile WHERE id = 1").fetchone()
+    
+    if row is None:
+        # 一次性迁移：从 settings.character.mask/personalization 复制
+        from services.settings import settings_service
+        char = settings_service.settings.character
+        now = datetime.now().isoformat()
+        conn.execute(
+            """INSERT INTO user_profile (id, name, mask, personalization, updated_at)
+               VALUES (1, '', ?, ?, ?)""",
+            (getattr(char, 'mask', ''), getattr(char, 'personalization', ''), now)
+        )
+        conn.commit()
+        row = conn.execute("SELECT * FROM user_profile WHERE id = 1").fetchone()
+    
+    conn.close()
+    return dict(row)
+
+
+def update_user_profile(data: dict) -> dict:
+    """部分更新用户档案。"""
+    conn = get_db()
+    now = datetime.now().isoformat()
+    
+    allowed = ['name', 'status_line', 'avatar_path', 'mask', 'profession', 'personalization']
+    fields = {k: data[k] for k in allowed if k in data}
+    
+    if not fields:
+        conn.close()
+        return get_user_profile()
+    
+    set_clause = ", ".join(f"{k} = ?" for k in fields) + ", updated_at = ?"
+    values = list(fields.values()) + [now]
+    
+    conn.execute(f"UPDATE user_profile SET {set_clause} WHERE id = 1", values)
+    conn.commit()
+    conn.close()
+    return get_user_profile()
+
+
+# ============ Todo 列表 ============
+
+def get_todos() -> list[dict]:
+    """获取全部 todo，按创建时间倒序"""
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM todos ORDER BY created_at DESC").fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def add_todo(content: str) -> dict:
+    """添加一条 todo"""
+    conn = get_db()
+    now = datetime.now().isoformat()
+    cursor = conn.execute(
+        "INSERT INTO todos (content, completed, created_at) VALUES (?, 0, ?)",
+        (content, now)
+    )
+    conn.commit()
+    todo_id = cursor.lastrowid
+    row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def delete_todo(todo_id: int) -> bool:
+    """删除一条 todo"""
+    conn = get_db()
+    conn.execute("DELETE FROM todos WHERE id = ?", (todo_id,))
+    affected = conn.total_changes
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def toggle_todo(todo_id: int, completed: bool) -> dict:
+    """切换 todo 完成状态"""
+    conn = get_db()
+    conn.execute(
+        "UPDATE todos SET completed = ? WHERE id = ?",
+        (1 if completed else 0, todo_id)
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
+    conn.close()
+    return dict(row)
 
 
 # ============ 初始化 ============

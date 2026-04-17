@@ -55,8 +55,11 @@ class OpenAIProvider(ModelProvider):
     """OpenAI / Azure OpenAI"""
 
     def list_models(self, api_key: str, base_url: Optional[str] = None) -> list[str]:
-        url = (base_url or "https://api.openai.com").rstrip("/") + "/v1/models"
-        headers = {"Authorization": f"Bearer {api_key}"}
+        base = (base_url or "https://api.openai.com").rstrip("/")
+        if base.endswith("/v1"):
+            url = base + "/models"
+        else:
+            url = base + "/v1/models"
         resp = requests.get(url, headers=headers, timeout=15)
         resp.raise_for_status()
         data = resp.json()
@@ -72,9 +75,17 @@ class OpenAICompatibleProvider(ModelProvider):
     def list_models(self, api_key: str, base_url: Optional[str] = None) -> list[str]:
         if not base_url:
             raise ValueError("OpenAI 兼容接口必须配置 Base URL")
-        url = base_url.rstrip("/") + "/v1/models"
+        base = base_url.rstrip("/")
+        # 如果 base_url 已经以 /v1 结尾，直接拼 /models；否则加 /v1/models
+        if base.endswith("/v1"):
+            url = base + "/models"
+        else:
+            url = base + "/v1/models"
         headers = {"Authorization": f"Bearer {api_key}"}
         resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data = resp.json()
+        return [item["id"] for item in data.get("data", [])]
         resp.raise_for_status()
         data = resp.json()
         return [item["id"] for item in data.get("data", [])]
@@ -89,6 +100,10 @@ class ProviderRegistry:
         "openai": OpenAIProvider(),
         "azure": OpenAIProvider(),
         "openai-compatible": OpenAICompatibleProvider(),
+        # OpenAI 兼容的国内服务
+        "kimi": OpenAICompatibleProvider(),
+        "deepseek": OpenAICompatibleProvider(),
+        "siliconflow": OpenAICompatibleProvider(),
     }
 
     @classmethod

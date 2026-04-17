@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import type { Message } from '@/types/message'
+import type { Message, Attachment } from '@/types/message'
 import { sendMessage } from '@/services/api'
 import { getConversations, getConversationMessages, deleteConversation } from '@/services/conversation'
 
@@ -19,26 +19,32 @@ export const useChatStore = defineStore('chat', () => {
   const error = ref<string | null>(null)
   const conversationId = ref<string | null>(null)
 
-  function addMessage(content: string, role: 'user' | 'assistant', status: Message['status'] = 'sent') {
+  function addMessage(
+    content: string,
+    role: 'user' | 'assistant',
+    status: Message['status'] = 'sent',
+    attachments?: Attachment[]
+  ) {
     const newMessage: Message = {
       id: generateMessageId(),
       role,
       content,
       timestamp: new Date(),
-      status
+      status,
+      attachments
     }
     messages.value.push(newMessage)
     return newMessage
   }
 
-  async function sendUserMessage(content: string) {
+  async function sendUserMessage(content: string, attachments?: Attachment[]) {
     // 1. 确保有 conversation_id
     if (!conversationId.value) {
       conversationId.value = generateConversationId()
     }
 
     // 2. 添加用户消息
-    addMessage(content, 'user', 'sent')
+    addMessage(content, 'user', 'sent', attachments)
 
     // 3. 添加 loading 占位消息
     const loadingMsg = addMessage('', 'assistant', 'sending')

@@ -5,7 +5,7 @@ import AppHeader from '@/components/layout/AppHeader.vue'
 import MessageList from '@/components/chat/MessageList.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import ChatMenuButton from '@/components/chat/ChatMenuButton.vue'
-import ChatDrawer from '@/components/chat/ChatDrawer.vue'
+import ChatMenuDrawer from '@/components/chat/ChatMenuDrawer.vue'
 
 const chatStore = useChatStore()
 const drawerOpen = ref(false)
@@ -87,7 +87,7 @@ function onSetBackground() {
     <MessageList :background-image="backgroundImage" />
     <ChatInput />
     
-    <ChatDrawer
+    <ChatMenuDrawer
       v-model="drawerOpen"
       @load-from-date="onLoadFromDate"
       @delete-conversation="onDeleteConversation"

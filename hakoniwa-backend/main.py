@@ -12,9 +12,12 @@ from memory import (
     get_conversation_messages,
     get_conversation_dates,
     delete_conversations as db_delete_conversations,
+    get_user_profile,
+    update_user_profile,
 )
 import asyncio
 from ennoia import ennoia
+from datetime import datetime
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -22,6 +25,8 @@ app = FastAPI(
     description="箱庭 - 陪伴型 AI 后端",
     version="0.2.0",
 )
+# 模块级调试状态
+_last_chat_error: dict | None = None
 
 # CORS
 app.add_middleware(
@@ -49,6 +54,7 @@ async def health_check():
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
+    global _last_chat_error
     if not request.message.strip():
         raise HTTPException(status_code=400, detail="消息不能为空")
 
@@ -59,6 +65,14 @@ async def chat(request: ChatRequest):
         )
         return ChatResponse.create(content=reply)
     except Exception as e:
+        import traceback
+        _last_chat_error = {
+            "message": str(e),
+            "type": type(e).__name__,
+            "traceback": traceback.format_exc(),
+            "timestamp": datetime.now().isoformat(),
+        }
+        print(f"[chat error] {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -285,6 +299,84 @@ async def ennoia_manual_tick():
     """手动触发一次 tick（调试用）"""
     summary = ennoia.tick()
     return summary
+@app.post("/api/ennoia/sync-activity-pool")
+async def ennoia_sync_activity_pool():
+    """从 insights 重新生成活动池（调试用）"""
+    from services.activity_bridge import sync_activity_pool
+    try:
+        result = sync_activity_pool()
+        return {"success": True, **result}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ════════════════════════════════════════
+#  用户档案
+# ════════════════════════════════════════
+
+@app.get("/api/user")
+async def api_get_user():
+    return get_user_profile()
+
+
+@app.put("/api/user")
+async def api_update_user(body: dict):
+    try:
+        return update_user_profile(body)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+# ════════════════════════════════════════
+#  Todo 列表
+# ════════════════════════════════════════
+
+from memory import get_todos, add_todo, delete_todo, toggle_todo
+
+
+@app.get("/api/todos")
+async def api_get_todos():
+    return {"todos": get_todos()}
+
+
+@app.post("/api/todos")
+async def api_create_todo(body: dict):
+    content = body.get("content", "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="内容不能为空")
+    return add_todo(content)
+
+
+@app.delete("/api/todos/{todo_id}")
+async def api_delete_todo(todo_id: int):
+    success = delete_todo(todo_id)
+    return {"success": success}
+
+
+@app.patch("/api/todos/{todo_id}")
+async def api_toggle_todo(todo_id: int, body: dict):
+    completed = bool(body.get("completed", False))
+    return toggle_todo(todo_id, completed)
+
+
+# ════════════════════════════════════════
+#  Debug
+# ════════════════════════════════════════
+
+_last_chat_error: dict | None = None
+
+
+@app.get("/api/debug/last-chat-error")
+async def debug_last_chat_error():
+    """最近一次 /api/chat 异常（内存，重启丢失）"""
+    return {"error": _last_chat_error}
+
+
+@app.post("/api/debug/clear-chat-error")
+async def debug_clear_chat_error():
+    global _last_chat_error
+    _last_chat_error = None
+    return {"success": True}
 
 
 @app.get("/api/ennoia/initiative")

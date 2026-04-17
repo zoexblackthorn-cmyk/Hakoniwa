@@ -2,6 +2,7 @@ export interface CharacterSettings {
   soul: string
   mask: string
   personalization: string
+  avatar_path: string
 }
 
 export interface LlmSettings {

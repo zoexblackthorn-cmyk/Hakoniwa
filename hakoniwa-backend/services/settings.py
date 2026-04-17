@@ -82,9 +82,29 @@ class SettingsService:
         return self.settings
 
     def update(self, partial: dict) -> AppSettings:
-        """部分更新设置（深合并）"""
+        """部分更新设置（深合并）
+
+        特殊逻辑：如果 provider 变了但 model 没一起给，自动应用新 provider 的 preset
+        """
         current = self.settings.model_dump()
+
+        # 检测 provider 切换
+        old_provider = current.get("api", {}).get("llm", {}).get("provider", "").lower()
+        new_llm = partial.get("api", {}).get("llm", {}) if partial else {}
+        new_provider = new_llm.get("provider", "").lower() if new_llm else ""
+
+        provider_changed = new_provider and new_provider != old_provider
+
         self._deep_merge(current, partial)
+
+        # provider 变了，但 model / base_url 没明确给出 → 应用 preset
+        if provider_changed:
+            preset = PROVIDER_PRESETS.get(new_provider, {})
+            if "model" not in new_llm or not new_llm.get("model"):
+                current["api"]["llm"]["model"] = preset.get("default_model", "")
+            if "base_url" not in new_llm or not new_llm.get("base_url"):
+                current["api"]["llm"]["base_url"] = preset.get("base_url", "")
+
         self._settings = AppSettings(**current)
         self._save()
         return self._settings
@@ -100,8 +120,22 @@ class SettingsService:
             parts.append(f"\n\n## 你的用户（Mask）\n{s.mask}")
         if s.personalization.strip():
             parts.append(f"\n\n## 用户偏好（Personalization）\n{s.personalization}")
+        
+        # 新增：注入用户信息
+        from memory import get_user_profile
+        user = get_user_profile()
+        user_section = ""
+        if any([user['name'], user['mask'], user['profession'], user['personalization']]):
+            uparts = ["【与你对话的人】"]
+            if user['name']: uparts.append(f"- 名字：{user['name']}")
+            if user['profession']: uparts.append(f"- 职业：{user['profession']}")
+            if user['mask']: uparts.append(f"- 她希望在你面前呈现的样子：\n{user['mask']}")
+            if user['personalization']: uparts.append(f"- 她希望你如何对待她：\n{user['personalization']}")
+            user_section = "\n".join(uparts) + "\n\n"
+        parts.append(user_section)
+        
         if memory_context.strip():
-            parts.append(f"\n\n## 你对用户的了解（Memory）\n{memory_context}")
+            parts.append(f"## 你对用户的了解（Memory）\n{memory_context}")
         if inner_life_context.strip():
             parts.append(f"\n\n## 你的内在状态（Inner Life）\n{inner_life_context}")
 

@@ -32,6 +32,14 @@ function onTabClick(path: string) {
       <span class="tab-icon">{{ tab.icon }}</span>
       <span class="tab-label">{{ tab.label }}</span>
     </button>
+    <button
+      class="tab-item debug-tab"
+      :class="{ active: isActive('/debug') }"
+      @click="onTabClick('/debug')"
+    >
+      <span class="tab-icon">🩵</span>
+      <span class="tab-label">debug</span>
+    </button>
   </nav>
 </template>
 
@@ -83,5 +91,23 @@ function onTabClick(path: string) {
   font-size: 11px;
   color: #9bb8cc;
   transition: color 0.2s;
+}
+
+.debug-tab {
+  .tab-icon {
+    color: #00bcd4;
+  }
+  .tab-label {
+    color: #00bcd4;
+  }
+  &.active {
+    .tab-icon {
+      color: #0097a7;
+    }
+    .tab-label {
+      color: #0097a7;
+      font-weight: 600;
+    }
+  }
 }
 </style>
