@@ -45,3 +45,4 @@ hakoniwa-backend/data/
 *.temp
 hakoniwa-backend/settings.json
 frontend design/
+*.zip
