@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getConversationDates } from '@/services/conversation'
+import { getConversationMessageDates } from '@/services/conversation'
+import { useChatStore } from '@/stores/chat'
 
 const emit = defineEmits<{
   select: [date: string]
 }>()
 
+const chatStore = useChatStore()
 const dates = ref<string[]>([])
 const loading = ref(false)
 const error = ref<string | null>(null)
@@ -16,7 +18,11 @@ const currentMonth = ref(new Date().getMonth())
 onMounted(async () => {
   loading.value = true
   try {
-    dates.value = await getConversationDates()
+    if (chatStore.conversationId) {
+      dates.value = await getConversationMessageDates(chatStore.conversationId)
+    } else {
+      dates.value = []
+    }
   } catch (e) {
     error.value = '加载日期失败'
   } finally {

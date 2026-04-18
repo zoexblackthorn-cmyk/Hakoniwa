@@ -1,14 +1,24 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { Message } from '@/types/message'
-import Avatar from './Avatar.vue'
-import { RotateCcw, Copy, Edit3 } from 'lucide-vue-next'
+import { RotateCcw, Copy, Edit3, Trash2, CheckSquare } from 'lucide-vue-next'
+import { useChatStore } from '@/stores/chat'
 
 const props = defineProps<{
   message: Message
 }>()
 
+const emit = defineEmits<{
+  'open-action-menu': [message: Message, x: number, y: number]
+  'toggle-select': [messageId: string]
+}>()
+
+const chatStore = useChatStore()
+const isEditing = ref(false)
+const editText = ref('')
 const isAssistant = props.message.role === 'assistant'
+
+const isSelected = computed(() => chatStore.isMessageSelected(props.message.id))
 
 const hasAttachments = computed(() => {
   const a = (props.message as any).attachments
@@ -35,13 +45,63 @@ function onCopy() {
 }
 
 function onRegenerate() {
-  // 占位
-  console.log('regenerate')
+  chatStore.retryLastAssistant()
 }
 
 function onEdit() {
-  // 占位
-  console.log('edit')
+  editText.value = props.message.content
+  isEditing.value = true
+}
+
+function onEditSave() {
+  if (editText.value.trim()) {
+    chatStore.editBubble(props.message.id, editText.value.trim())
+  }
+  isEditing.value = false
+}
+
+function onEditCancel() {
+  isEditing.value = false
+}
+
+function onDelete() {
+  chatStore.deleteSingleMessage(props.message.id)
+}
+
+function onContextMenu(e: MouseEvent) {
+  e.preventDefault()
+  if (chatStore.isMultiSelectMode) return
+  emit('open-action-menu', props.message, e.clientX, e.clientY)
+}
+
+let longPressTimer: ReturnType<typeof setTimeout> | null = null
+
+function onTouchStart(e: TouchEvent) {
+  if (chatStore.isMultiSelectMode) return
+  longPressTimer = setTimeout(() => {
+    const touch = e.touches[0]
+    emit('open-action-menu', props.message, touch.clientX, touch.clientY)
+  }, 600)
+}
+
+function onTouchEnd() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+}
+
+function onTouchMove() {
+  if (longPressTimer) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
+  }
+}
+
+function onBubbleClick() {
+  if (chatStore.isMultiSelectMode) {
+    emit('toggle-select', props.message.id)
+  }
 }
 
 function formatTime(date: Date): string {
@@ -56,13 +116,43 @@ function formatTime(date: Date): string {
 </script>
 
 <template>
-  <div class="message-row" :class="isAssistant ? 'left' : 'right'">
-    <Avatar v-if="isAssistant" :role="message.role" />
-    <div class="bubble-wrapper">
-      <div class="bubble" :class="[message.role, message.status]">
-        <p v-if="message.status === 'sending'" class="content loading-dots">
+  <div
+    class="message-row"
+    :class="[isAssistant ? 'left' : 'right', { 'select-mode': chatStore.isMultiSelectMode }]"
+    @contextmenu="onContextMenu"
+    @touchstart="onTouchStart"
+    @touchend="onTouchEnd"
+    @touchmove="onTouchMove"
+  >
+    <!-- 多选复选框 -->
+    <div
+      v-if="chatStore.isMultiSelectMode && message.status !== 'typing' && message.status !== 'sending'"
+      class="select-checkbox"
+      :class="{ checked: isSelected }"
+      @click.stop="emit('toggle-select', message.id)"
+    >
+      <CheckSquare v-if="isSelected" :size="18" />
+      <div v-else class="checkbox-empty" />
+    </div>
+
+    <div class="bubble-wrapper" @click.stop="onBubbleClick">
+      <div
+        class="bubble"
+        :class="[message.role, message.status, { 'selectable': chatStore.isMultiSelectMode }]"
+      >
+        <p v-if="message.status === 'typing'" class="content typing-dot-wrap">
+          <span class="typing-dot"></span>
+        </p>
+        <p v-else-if="message.status === 'sending'" class="content loading-dots">
           <span></span><span></span><span></span>
         </p>
+        <div v-else-if="isEditing" class="edit-area">
+          <textarea v-model="editText" class="edit-input" rows="3"></textarea>
+          <div class="edit-actions">
+            <button class="edit-btn save" @click="onEditSave">保存</button>
+            <button class="edit-btn cancel" @click="onEditCancel">取消</button>
+          </div>
+        </div>
         <p v-else-if="message.content" class="content">{{ message.content }}</p>
         <div v-if="hasAttachments" class="attachments">
           <img
@@ -76,9 +166,10 @@ function formatTime(date: Date): string {
       </div>
       <!-- meta-row: purely visual wrapper keeping time + actions on one line -->
       <div class="meta-row">
+        <span v-if="!isAssistant && message.status === 'read'" class="read-mark">已读</span>
         <span class="time">{{ formatTime(message.timestamp) }}</span>
         <!-- 悬停操作栏（仅 assistant） -->
-        <div v-if="isAssistant && message.status === 'sent'" class="actions">
+        <div v-if="isAssistant && message.status === 'sent' && !chatStore.isMultiSelectMode" class="actions">
           <button class="action-btn" title="重新生成" @click="onRegenerate">
             <RotateCcw :size="14" />
           </button>
@@ -88,10 +179,12 @@ function formatTime(date: Date): string {
           <button class="action-btn" title="编辑" @click="onEdit">
             <Edit3 :size="14" />
           </button>
+          <button class="action-btn" title="删除" @click="onDelete">
+            <Trash2 :size="14" />
+          </button>
         </div>
       </div>
     </div>
-    <Avatar v-if="!isAssistant" :role="message.role" />
   </div>
 </template>
 
@@ -109,6 +202,10 @@ function formatTime(date: Date): string {
   &.right {
     justify-content: flex-end;
   }
+
+  &.select-mode {
+    padding-left: 4px;
+  }
 }
 
 /* Hide the side avatars — the design shows bubbles only,
@@ -117,19 +214,46 @@ function formatTime(date: Date): string {
   display: none;
 }
 
+.select-checkbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  color: #7ab8d6;
+  cursor: pointer;
+  margin-bottom: 20px;
+
+  .checkbox-empty {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #c0d8e8;
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+
+  &:hover .checkbox-empty {
+    border-color: #7ab8d6;
+  }
+
+  &.checked {
+    color: #4a9fd4;
+  }
+}
+
 .bubble-wrapper {
   display: flex;
   flex-direction: column;
   gap: 6px;
   max-width: 74%;
+}
+.message-row.left .bubble-wrapper {
+  align-items: flex-start;
+}
 
-  .left & {
-    align-items: flex-start;
-  }
-
-  .right & {
-    align-items: flex-end;
-  }
+.message-row.right .bubble-wrapper {
+  align-items: flex-end;
 }
 
 .bubble {
@@ -141,6 +265,7 @@ function formatTime(date: Date): string {
   word-break: break-word;
   min-width: 20px;
   box-shadow: 0 2px 10px rgba(120, 170, 210, 0.12);
+  transition: transform 0.15s, box-shadow 0.15s;
 
   /* assistant bubble — mid blue, slightly deeper */
   &.assistant {
@@ -163,6 +288,14 @@ function formatTime(date: Date): string {
   &.error {
     background: #fff5f5;
     color: #c55;
+  }
+
+  &.selectable {
+    cursor: pointer;
+
+    &:hover {
+      box-shadow: 0 4px 16px rgba(120, 170, 210, 0.22);
+    }
   }
 }
 
@@ -254,14 +387,20 @@ function formatTime(date: Date): string {
   padding: 0 4px;
 }
 
-.left .meta-row {
-  flex-direction: row;          /* time | actions */
+.message-row.left .meta-row {
+  flex-direction: row;
   justify-content: flex-start;
 }
 
-.right .meta-row {
-  flex-direction: row-reverse;  /* (no actions for user) time sits flush right */
+.message-row.right .meta-row {
+  flex-direction: row-reverse;
   justify-content: flex-start;
+}
+
+.read-mark {
+  font-size: 11px;
+  color: #7ab8d6;
+  font-weight: 500;
 }
 
 .time {
@@ -269,5 +408,91 @@ function formatTime(date: Date): string {
   color: rgba(74, 106, 128, 0.65);
   font-weight: 500;
   letter-spacing: 0.02em;
+}
+
+/* ---- 编辑区域 ---- */
+.edit-area {
+  width: 100%;
+}
+
+.edit-input {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px;
+  border: 1.5px solid #a8c8dc;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  font-size: 14px;
+  line-height: 1.5;
+  color: #3a5a70;
+  resize: vertical;
+  outline: none;
+  font-family: inherit;
+  box-sizing: border-box;
+
+  &:focus {
+    border-color: #7ab8d6;
+  }
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+  justify-content: flex-end;
+}
+
+.edit-btn {
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+
+  &.save {
+    background: #9AC9FF;
+    color: #2f4f68;
+  }
+  &.save:hover {
+    background: #7ab8f0;
+  }
+
+  &.cancel {
+    background: #e8e8e8;
+    color: #666;
+  }
+  &.cancel:hover {
+    background: #d8d8d8;
+  }
+}
+
+/* typing 脉冲圆点 */
+.typing-dot-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 1.2em;
+  padding: 2px 0;
+}
+
+.typing-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  animation: slow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes slow-pulse {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 </style>

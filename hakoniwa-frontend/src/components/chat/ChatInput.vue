@@ -10,7 +10,7 @@ const fileInputRef = ref<HTMLInputElement | null>(null)
 
 function onSend() {
   const text = inputValue.value.trim()
-  if ((!text && pendingAttachments.value.length === 0) || chatStore.isLoading) return
+  if (!text && pendingAttachments.value.length === 0) return
 
   const attachments = pendingAttachments.value.length > 0 ? [...pendingAttachments.value] : undefined
   chatStore.sendUserMessage(text, attachments)
@@ -79,7 +79,6 @@ function removeAttachment(index: number) {
         v-model="inputValue"
         class="input"
         placeholder="Enter Your Message..."
-        :disabled="chatStore.isLoading"
         rows="1"
         @keydown="onKeydown"
       />

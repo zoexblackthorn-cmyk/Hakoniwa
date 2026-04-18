@@ -8,6 +8,9 @@ from memory import (
     save_conversation_message,
     get_conversation_messages,
     delete_conversations as db_delete_conversations,
+    get_last_assistant_message,
+    get_last_user_message,
+    delete_message_by_id,
 )
 from ennoia import ennoia
 
@@ -71,7 +74,7 @@ class LLMService:
         return history[-100:]
 
     # ─── Claude (Anthropic) ───
-    async def _chat_claude(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None) -> str:
+    async def _chat_claude(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None, is_retry: bool = False) -> str:
         attachments = attachments or []
         import anthropic
 
@@ -120,16 +123,17 @@ class LLMService:
 
         # 保存到数据库
         if conversation_id:
-            save_conversation_message(
-                conversation_id, "user", message,
-                metadata={"attachments": attachments} if attachments else None
-            )
+            if not is_retry:
+                save_conversation_message(
+                    conversation_id, "user", message,
+                    metadata={"attachments": attachments} if attachments else None
+                )
             save_conversation_message(conversation_id, "assistant", reply)
 
         return reply
 
     # ─── Gemini (Google) ───
-    async def _chat_gemini(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None) -> str:
+    async def _chat_gemini(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None, is_retry: bool = False) -> str:
         attachments = attachments or []
         import google.generativeai as genai
         from PIL import Image
@@ -172,16 +176,17 @@ class LLMService:
 
         # 保存到数据库
         if conversation_id:
-            save_conversation_message(
-                conversation_id, "user", message,
-                metadata={"attachments": attachments} if attachments else None
-            )
+            if not is_retry:
+                save_conversation_message(
+                    conversation_id, "user", message,
+                    metadata={"attachments": attachments} if attachments else None
+                )
             save_conversation_message(conversation_id, "assistant", reply)
 
         return reply
 
     # ─── OpenAI Compatible (Kimi / DeepSeek / OpenAI / etc.) ───
-    async def _chat_openai_compatible(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None) -> str:
+    async def _chat_openai_compatible(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None, is_retry: bool = False) -> str:
         attachments = attachments or []
         from openai import AsyncOpenAI
 
@@ -228,11 +233,49 @@ class LLMService:
 
         # 保存到数据库
         if conversation_id:
-            save_conversation_message(
-                conversation_id, "user", message,
-                metadata={"attachments": attachments} if attachments else None
-            )
+            if not is_retry:
+                save_conversation_message(
+                    conversation_id, "user", message,
+                    metadata={"attachments": attachments} if attachments else None
+                )
             save_conversation_message(conversation_id, "assistant", reply)
+
+        return reply
+
+    async def retry(self, conversation_id: str) -> str:
+        """重试：删除最后一条 assistant 消息，用最后一条 user 消息重新生成"""
+        # 1. 找到并删除最后一条 assistant 消息
+        last_assistant = get_last_assistant_message(conversation_id)
+        if last_assistant:
+            delete_message_by_id(last_assistant['id'])
+
+        # 2. 找到最后一条 user 消息
+        last_user = get_last_user_message(conversation_id)
+        if not last_user:
+            raise Exception("没有找到用户消息，无法重试")
+
+        message = last_user['content']
+
+        # 3. 获取上下文（和 chat 一样）
+        memory_context = memory_service.get_context(current_message=message)
+
+        try:
+            inner_life_context = ennoia.get_prompt_context()
+        except Exception:
+            inner_life_context = ""
+
+        # 4. 调用 LLM（is_retry=True → 不重复保存 user 消息）
+        llm_cfg = settings_service.settings.api.llm
+        provider = llm_cfg.provider.lower()
+
+        if provider == "claude":
+            reply = await self._chat_claude(message, conversation_id, memory_context, inner_life_context, is_retry=True)
+        elif provider == "gemini":
+            reply = await self._chat_gemini(message, conversation_id, memory_context, inner_life_context, is_retry=True)
+        else:
+            reply = await self._chat_openai_compatible(message, conversation_id, memory_context, inner_life_context, is_retry=True)
+
+        memory_service.record_message(reply, role="assistant")
 
         return reply
 

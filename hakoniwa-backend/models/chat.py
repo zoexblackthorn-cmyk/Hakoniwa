@@ -50,3 +50,18 @@ class SearchResultItem(BaseModel):
 class SearchResponse(BaseModel):
     """搜索响应"""
     results: list[SearchResultItem]
+
+
+class RetryRequest(BaseModel):
+    """重试请求"""
+    conversation_id: str
+
+
+class EditMessageRequest(BaseModel):
+    """编辑消息请求"""
+    content: str
+
+
+class BatchDeleteMessagesRequest(BaseModel):
+    """批量删除消息请求"""
+    ids: list[int]

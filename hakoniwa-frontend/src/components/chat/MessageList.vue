@@ -3,9 +3,17 @@ import { ref, watch, nextTick, computed, onMounted } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import type { Message } from '@/types/message'
 import MessageBubble from './MessageBubble.vue'
+import MessageActionMenu from './MessageActionMenu.vue'
 
 const chatStore = useChatStore()
 const listRef = ref<HTMLElement | null>(null)
+
+const actionMenu = ref<{
+  show: boolean
+  message: Message | null
+  x: number
+  y: number
+}>({ show: false, message: null, x: 0, y: 0 })
 
 async function scrollToBottom(behavior: ScrollBehavior = 'smooth') {
   await nextTick()
@@ -28,6 +36,23 @@ onMounted(() => {
 watch(
   () => chatStore.messages.length,
   () => scrollToBottom('smooth')
+)
+
+// 高亮消息跳转
+watch(
+  () => chatStore.highlightDbMessageId,
+  async (id) => {
+    if (!id || !listRef.value) return
+    await nextTick()
+    const el = listRef.value.querySelector(`[data-db-id="${id}"]`)
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // 3 秒后清除高亮
+      setTimeout(() => {
+        chatStore.setHighlightDbMessageId(null)
+      }, 3000)
+    }
+  }
 )
 
 interface GroupedItem {
@@ -64,6 +89,22 @@ function formatDateLabel(date: Date): string {
   if (d.getTime() === yesterday.getTime()) return 'Yesterday'
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
+
+function onOpenActionMenu(message: Message, x: number, y: number) {
+  actionMenu.value = { show: true, message, x, y }
+}
+
+function onCloseActionMenu() {
+  actionMenu.value.show = false
+}
+
+function onToggleSelect(messageId: string) {
+  chatStore.toggleMessageSelection(messageId)
+}
+
+function isHighlighted(msg: Message): boolean {
+  return !!msg.dbMessageId && msg.dbMessageId === chatStore.highlightDbMessageId
+}
 </script>
 
 <template>
@@ -77,12 +118,28 @@ function formatDateLabel(date: Date): string {
         <div v-if="item.type === 'date'" class="date-divider">
           <span class="date-pill">{{ item.label }}</span>
         </div>
-        <MessageBubble
+        <div
           v-else-if="item.message"
-          :message="item.message"
-        />
+          class="message-wrap"
+          :class="{ highlighted: isHighlighted(item.message) }"
+          :data-db-id="item.message.dbMessageId"
+        >
+          <MessageBubble
+            :message="item.message"
+            @open-action-menu="onOpenActionMenu"
+            @toggle-select="onToggleSelect"
+          />
+        </div>
       </template>
     </template>
+
+    <MessageActionMenu
+      v-if="actionMenu.show && actionMenu.message"
+      :message="actionMenu.message"
+      :x="actionMenu.x"
+      :y="actionMenu.y"
+      @close="onCloseActionMenu"
+    />
   </div>
 </template>
 
@@ -129,5 +186,24 @@ function formatDateLabel(date: Date): string {
   border-radius: 999px;
   box-shadow: 0 3px 10px rgba(120, 170, 210, 0.15);
   letter-spacing: 0.02em;
+}
+
+.message-wrap {
+  border-radius: 16px;
+  transition: background 0.3s ease;
+
+  &.highlighted {
+    background: rgba(154, 201, 255, 0.25);
+    animation: highlight-pulse 1.5s ease-in-out 2;
+  }
+}
+
+@keyframes highlight-pulse {
+  0%, 100% {
+    background: rgba(154, 201, 255, 0.15);
+  }
+  50% {
+    background: rgba(154, 201, 255, 0.35);
+  }
 }
 </style>

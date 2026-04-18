@@ -26,7 +26,8 @@ const form = reactive<Settings>({
     search: { provider: 'brave', api_key: '' },
     image_gen: { provider: '', api_key: '', model: '' }
   },
-  theme: { dark_mode: false, skin: 'default' }
+  theme: { dark_mode: false, skin: 'default' },
+  system_prompt: { base: '' }
 })
 
 const llmModels = ref<string[]>([])

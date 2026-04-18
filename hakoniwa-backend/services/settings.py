@@ -3,6 +3,29 @@ import os
 from models.settings import AppSettings
 import config
 
+BUBBLE_SPLIT_INSTRUCTION = """
+
+## 回复格式（Message Formatting）
+你在即时通讯软件中回复。像真人一样，把回复拆成自然的消息气泡。
+用一行只包含 --- 的分隔符来标记气泡边界。
+
+规则：
+- 1-3 个气泡是最常见的，4 个以上应该很少出现
+- 短回复（一句话）不需要分隔符
+- 永远不要把 --- 当作可见内容展示
+- 根据你的情绪和语境自然断句，不要机械分割
+
+示例：
+输入: 你在干嘛
+输出: 在看书
+---
+你呢
+
+输入: 晚饭吃了吗
+输出: 吃了
+---
+你呢，别告诉我又忘了"""
+
 # Provider 预设配置
 PROVIDER_PRESETS = {
     "claude": {"base_url": "", "default_model": "claude-sonnet-4-20250514"},
@@ -155,6 +178,9 @@ class SettingsService:
             parts.append(f"\n\n## 你对用户的了解（Memory）\n{memory_context}")
         if inner_life_context.strip():
             parts.append(f"\n\n## 你的内在状态（Inner Life）\n{inner_life_context}")
+
+        # 气泡分隔指令（始终注入，不受自定义 prompt 影响）
+        parts.append(BUBBLE_SPLIT_INSTRUCTION)
 
         # 注入当前精确时间
         from datetime import datetime

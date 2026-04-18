@@ -185,6 +185,7 @@ def init_db():
             content TEXT NOT NULL,
             timestamp TEXT NOT NULL,
             metadata TEXT,
+            message_type TEXT DEFAULT 'text',
             FOREIGN KEY (conversation_id) REFERENCES conversations(conversation_id) ON DELETE CASCADE
         );
         
@@ -224,6 +225,11 @@ def init_db():
     cols = [r[1] for r in conn.execute("PRAGMA table_info(user_profile)").fetchall()]
     if 'avatar_path' not in cols:
         conn.execute("ALTER TABLE user_profile ADD COLUMN avatar_path TEXT DEFAULT ''")
+    
+    # ── 迁移：为已存在的 conversation_messages 表补全 message_type 列 ──
+    msg_cols = [r[1] for r in conn.execute("PRAGMA table_info(conversation_messages)").fetchall()]
+    if 'message_type' not in msg_cols:
+        conn.execute("ALTER TABLE conversation_messages ADD COLUMN message_type TEXT DEFAULT 'text'")
         conn.commit()
     
     conn.close()
@@ -534,6 +540,26 @@ def ensure_conversation(conversation_id: str, title: Optional[str] = None) -> No
     conn.close()
 
 
+def infer_message_type(content: str, metadata: Optional[dict] = None) -> str:
+    """根据内容和元数据推断消息类型"""
+    if metadata:
+        attachments = metadata.get('attachments', [])
+        if attachments and len(attachments) > 0:
+            first = attachments[0]
+            if isinstance(first, dict):
+                url = first.get('url', '')
+                mime = first.get('type', '')
+                if mime.startswith('image/') or url.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp')):
+                    return 'image'
+                return 'file'
+    # 检测 URL
+    import re
+    url_pattern = r'https?://[^\s]+'
+    if re.search(url_pattern, content):
+        return 'link'
+    return 'text'
+
+
 def save_conversation_message(
     conversation_id: str,
     role: str,
@@ -549,11 +575,12 @@ def save_conversation_message(
     conn = get_db()
     ts = timestamp or datetime.now().isoformat()
     meta_json = json.dumps(metadata) if metadata else None
+    message_type = infer_message_type(content, metadata)
     
     cursor = conn.execute(
-        """INSERT INTO conversation_messages (conversation_id, role, content, timestamp, metadata)
-           VALUES (?, ?, ?, ?, ?)""",
-        (conversation_id, role, content, ts, meta_json)
+        """INSERT INTO conversation_messages (conversation_id, role, content, timestamp, metadata, message_type)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (conversation_id, role, content, ts, meta_json, message_type)
     )
     conn.commit()
     message_id = cursor.lastrowid
@@ -584,6 +611,81 @@ def get_conversation_messages(
     
     conn.close()
     return [dict(row) for row in rows]
+
+
+def delete_messages_by_ids(message_ids: list[int]) -> int:
+    """批量删除消息，返回删除数量"""
+    if not message_ids:
+        return 0
+    conn = get_db()
+    placeholders = ",".join("?" * len(message_ids))
+    cursor = conn.execute(
+        f"DELETE FROM conversation_messages WHERE id IN ({placeholders})",
+        message_ids
+    )
+    conn.commit()
+    deleted = cursor.rowcount
+    conn.close()
+    return deleted
+
+
+def clear_conversation_messages(conversation_id: str) -> int:
+    """清空某对话的所有消息，返回删除数量"""
+    conn = get_db()
+    cursor = conn.execute(
+        "DELETE FROM conversation_messages WHERE conversation_id = ?",
+        (conversation_id,)
+    )
+    conn.commit()
+    deleted = cursor.rowcount
+    conn.close()
+    return deleted
+
+
+def search_conversation_messages(
+    conversation_id: str,
+    keyword: Optional[str] = None,
+    message_type: Optional[str] = None,
+    date: Optional[str] = None
+) -> list[dict]:
+    """搜索对话消息，支持关键词、类型、日期筛选"""
+    conn = get_db()
+    conditions = ["conversation_id = ?"]
+    params: list = [conversation_id]
+    
+    if keyword:
+        conditions.append("content LIKE ?")
+        params.append(f"%{keyword}%")
+    
+    if message_type:
+        conditions.append("message_type = ?")
+        params.append(message_type)
+    
+    if date:
+        conditions.append("date(timestamp) = ?")
+        params.append(date)
+    
+    where = " AND ".join(conditions)
+    rows = conn.execute(
+        f"SELECT * FROM conversation_messages WHERE {where} ORDER BY timestamp ASC",
+        params
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_message_dates(conversation_id: str) -> list[str]:
+    """获取某对话有消息的日期列表（YYYY-MM-DD）"""
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT DISTINCT date(timestamp) as day 
+           FROM conversation_messages 
+           WHERE conversation_id = ?
+           ORDER BY day DESC""",
+        (conversation_id,)
+    ).fetchall()
+    conn.close()
+    return [row["day"] for row in rows]
 
 
 def get_conversations(limit: int = 100) -> list[dict]:
@@ -717,6 +819,58 @@ def toggle_todo(todo_id: int, completed: bool) -> dict:
     row = conn.execute("SELECT * FROM todos WHERE id = ?", (todo_id,)).fetchone()
     conn.close()
     return dict(row)
+
+
+def get_last_assistant_message(conversation_id: str) -> dict | None:
+    """获取对话中最后一条 assistant 消息"""
+    conn = get_db()
+    row = conn.execute(
+        """SELECT * FROM conversation_messages
+           WHERE conversation_id = ? AND role = 'assistant'
+           ORDER BY id DESC LIMIT 1""",
+        (conversation_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_last_user_message(conversation_id: str) -> dict | None:
+    """获取对话中最后一条 user 消息"""
+    conn = get_db()
+    row = conn.execute(
+        """SELECT * FROM conversation_messages
+           WHERE conversation_id = ? AND role = 'user'
+           ORDER BY id DESC LIMIT 1""",
+        (conversation_id,)
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_message_by_id(message_id: int) -> bool:
+    """按 ID 删除一条消息"""
+    conn = get_db()
+    cursor = conn.execute(
+        "DELETE FROM conversation_messages WHERE id = ?",
+        (message_id,)
+    )
+    conn.commit()
+    deleted = cursor.rowcount > 0
+    conn.close()
+    return deleted
+
+
+def update_message_content(message_id: int, new_content: str) -> bool:
+    """更新一条消息的内容"""
+    conn = get_db()
+    cursor = conn.execute(
+        "UPDATE conversation_messages SET content = ? WHERE id = ?",
+        (new_content, message_id)
+    )
+    conn.commit()
+    updated = cursor.rowcount > 0
+    conn.close()
+    return updated
 
 
 # ============ 初始化 ============

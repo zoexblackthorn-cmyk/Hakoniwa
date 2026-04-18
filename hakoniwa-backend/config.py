@@ -34,6 +34,8 @@ Priority:
 2. Preserve relationship continuity
 3. Respond naturally as a close companion"""
 
+
+
 # ─── 设置文件路径 ───
 SETTINGS_FILE = os.getenv("SETTINGS_FILE", "settings.json")
 

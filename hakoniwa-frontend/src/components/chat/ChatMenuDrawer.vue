@@ -7,12 +7,13 @@ const props = defineProps<{
   modelValue: boolean
 }>()
 
-const emit = defineEmits<{
-  'update:modelValue': [value: boolean]
-  'loadFromDate': [date: string]
-  'deleteConversation': []
-  'setBackground': []
-}>()
+const emit = defineEmits([
+  'update:modelValue',
+  'loadFromDate',
+  'deleteConversation',
+  'setBackground',
+  'search'
+])
 
 // 当前页面：menu | calendar | delete
 const currentPage = ref<'menu' | 'calendar' | 'delete'>('menu')
@@ -56,6 +57,12 @@ function onSetBackground() {
   emit('setBackground')
   close()
 }
+
+function onOpenSearch() {
+  console.log('[ChatMenuDrawer] onOpenSearch clicked')
+  emit('search')
+  close()
+}
 </script>
 
 <template>
@@ -78,10 +85,16 @@ function onSetBackground() {
           <div class="menu-list">
             <button class="menu-item" @click="goToCalendar">
               <span class="menu-icon">📅</span>
-              <span class="menu-text">查找聊天记录</span>
+              <span class="menu-text">按日期查找</span>
               <span class="menu-arrow">›</span>
             </button>
-            
+
+            <button class="menu-item" @click="onOpenSearch">
+              <span class="menu-icon">🔍</span>
+              <span class="menu-text">搜索聊天内容</span>
+              <span class="menu-arrow">›</span>
+            </button>
+
             <button class="menu-item" @click="onSetBackground">
               <span class="menu-icon">🖼️</span>
               <span class="menu-text">设置当前聊天背景</span>

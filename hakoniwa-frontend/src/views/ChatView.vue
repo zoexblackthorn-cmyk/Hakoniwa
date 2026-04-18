@@ -6,16 +6,19 @@ import MessageList from '@/components/chat/MessageList.vue'
 import ChatInput from '@/components/chat/ChatInput.vue'
 import ChatMenuButton from '@/components/chat/ChatMenuButton.vue'
 import ChatMenuDrawer from '@/components/chat/ChatMenuDrawer.vue'
+import MessageMultiSelectBar from '@/components/chat/MessageMultiSelectBar.vue'
+import ChatMessageSearch from '@/components/chat/ChatMessageSearch.vue'
 
 const chatStore = useChatStore()
 const drawerOpen = ref(false)
+const showSearch = ref(false)
 const backgroundImage = ref<string | null>(null)
 
 // 页面加载时：恢复最近对话和背景图
 onMounted(async () => {
   // 先加载最近对话（会自动设置 conversationId）
   await chatStore.loadRecentConversation()
-  
+
   // 从 localStorage 加载背景图
   if (chatStore.conversationId) {
     const saved = localStorage.getItem(`chat-bg-${chatStore.conversationId}`)
@@ -75,6 +78,17 @@ function onSetBackground() {
   }
   input.click()
 }
+
+function onOpenSearch() {
+  console.log('[ChatView] onOpenSearch called, showSearch =', showSearch.value)
+  showSearch.value = true
+  chatStore.enterSearchMode()
+}
+
+function onCloseSearch() {
+  showSearch.value = false
+  chatStore.exitSearchMode()
+}
 </script>
 
 <template>
@@ -85,13 +99,20 @@ function onSetBackground() {
       </template>
     </AppHeader>
     <MessageList :background-image="backgroundImage" />
-    <ChatInput />
-    
+    <ChatInput v-if="!chatStore.isMultiSelectMode" />
+    <MessageMultiSelectBar v-else />
+
     <ChatMenuDrawer
       v-model="drawerOpen"
       @load-from-date="onLoadFromDate"
       @delete-conversation="onDeleteConversation"
       @set-background="onSetBackground"
+      @search="onOpenSearch"
+    />
+
+    <ChatMessageSearch
+      v-if="showSearch"
+      @close="onCloseSearch"
     />
   </div>
 </template>

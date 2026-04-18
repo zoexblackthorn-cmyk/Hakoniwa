@@ -3,7 +3,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import config
-from models.chat import ChatRequest, ChatResponse, HealthResponse, TTSRequest, SearchResponse
+from models.chat import (
+    ChatRequest, ChatResponse, HealthResponse,
+    TTSRequest, SearchResponse,
+    RetryRequest, EditMessageRequest,
+    BatchDeleteMessagesRequest,
+)
 from models.settings import AppSettings
 from services.llm import llm_service
 from services.settings import settings_service
@@ -20,6 +25,13 @@ from memory import (
     get_user_profile,
     update_user_profile,
     save_conversation_message,
+    get_last_assistant_message,
+    update_message_content,
+    delete_message_by_id,
+    delete_messages_by_ids,
+    clear_conversation_messages,
+    search_conversation_messages,
+    get_message_dates,
 )
 import asyncio
 from ennoia import ennoia
@@ -138,7 +150,13 @@ async def chat(request: ChatRequest):
             conversation_id=request.conversation_id,
             attachments=request.attachments,
         )
-        return ChatResponse.create(content=reply)
+        # 查找刚保存的 assistant 消息的数据库 ID
+        last_msg = get_last_assistant_message(request.conversation_id) if request.conversation_id else None
+        resp = ChatResponse.create(content=reply)
+        return {
+            **resp.model_dump(),
+            "db_message_id": last_msg['id'] if last_msg else None
+        }
     except Exception as e:
         import traceback
         _last_chat_error = {
@@ -149,6 +167,49 @@ async def chat(request: ChatRequest):
         }
         print(f"[chat error] {type(e).__name__}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chat/retry")
+async def retry_chat(request: RetryRequest):
+    """重试：删除最后一条 AI 回复，重新生成"""
+    global _last_chat_error
+
+    if not request.conversation_id:
+        raise HTTPException(status_code=400, detail="conversation_id 不能为空")
+
+    try:
+        reply = await llm_service.retry(conversation_id=request.conversation_id)
+
+        last_msg = get_last_assistant_message(request.conversation_id)
+        return {
+            "id": str(last_msg['id']) if last_msg else str(int(datetime.now().timestamp() * 1000)),
+            "role": "assistant",
+            "content": reply,
+            "timestamp": datetime.now().isoformat(),
+            "db_message_id": last_msg['id'] if last_msg else None,
+        }
+    except Exception as e:
+        import traceback
+        _last_chat_error = {
+            "message": str(e),
+            "type": type(e).__name__,
+            "traceback": traceback.format_exc(),
+            "timestamp": datetime.now().isoformat(),
+        }
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/conversation/message/{message_id}")
+async def edit_message(message_id: int, request: EditMessageRequest):
+    """编辑一条消息的内容"""
+    if not request.content.strip():
+        raise HTTPException(status_code=400, detail="内容不能为空")
+
+    success = update_message_content(message_id, request.content)
+    if not success:
+        raise HTTPException(status_code=404, detail="消息不存在")
+
+    return {"success": True, "message_id": message_id}
 
 
 @app.delete("/api/conversation/{conversation_id}")
@@ -190,6 +251,50 @@ async def delete_conversations(body: dict):
         raise HTTPException(status_code=400, detail="ids 不能为空")
     affected = db_delete_conversations(ids)
     return {"success": True, "deleted": affected}
+
+
+@app.delete("/api/message/{message_id}")
+async def delete_message(message_id: int):
+    """删除单条消息"""
+    success = delete_message_by_id(message_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    return {"success": True}
+
+
+@app.delete("/api/messages")
+async def batch_delete_messages(request: BatchDeleteMessagesRequest):
+    """批量删除消息"""
+    if not request.ids:
+        raise HTTPException(status_code=400, detail="ids 不能为空")
+    deleted = delete_messages_by_ids(request.ids)
+    return {"success": True, "deleted": deleted}
+
+
+@app.delete("/api/conversation/{conversation_id}/messages")
+async def clear_messages_endpoint(conversation_id: str):
+    """清空某对话的所有消息"""
+    deleted = clear_conversation_messages(conversation_id)
+    return {"success": True, "deleted": deleted}
+
+
+@app.get("/api/conversation/{conversation_id}/search")
+async def search_messages(
+    conversation_id: str,
+    keyword: Optional[str] = Query(None, description="关键词"),
+    message_type: Optional[str] = Query(None, description="消息类型: text/image/file/link"),
+    date: Optional[str] = Query(None, description="日期: YYYY-MM-DD")
+):
+    """搜索对话消息"""
+    results = search_conversation_messages(conversation_id, keyword, message_type, date)
+    return {"messages": results}
+
+
+@app.get("/api/conversation/{conversation_id}/dates")
+async def list_conversation_message_dates(conversation_id: str):
+    """获取某对话有消息的日期列表"""
+    dates = get_message_dates(conversation_id)
+    return {"dates": dates}
 
 
 # ════════════════════════════════════════
