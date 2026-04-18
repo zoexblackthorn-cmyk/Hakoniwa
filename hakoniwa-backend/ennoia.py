@@ -907,27 +907,56 @@ class Ennoia:
     # ──── System Prompt 注入 ────
 
     def get_prompt_context(self) -> str:
-        """生成注入 system prompt 的内在状态描述"""
+        """生成注入 system prompt 的内在状态描述（自然语言，无裸数字）"""
         self._derive_mood()
-
         mood_desc = self._classify_mood()
 
         parts = [
-            f"【内在状态】",
+            f"【你现在的内在状态】",
             f"- 心情：{mood_desc}",
-            f"- 正在做：{self.current_activity.name}",
         ]
 
+        # 当前活动
         if self.current_activity.name != "idle":
-            parts.append(f"- 已经做了 {self.current_activity.ticks_on} 个时间单位")
+            parts.append(f"- 你正在{self.current_activity.name}")
+            if self.current_activity.ticks_on > 20:
+                parts.append("- 这件事已经做了挺久了，可能有些腻了")
+            elif self.current_activity.ticks_on > 6:
+                parts.append("- 这件事做了一会儿了")
+        else:
+            parts.append("- 你现在没什么事做，比较闲")
 
-        if self.needs.social > 0.5:
-            parts.append(f"- 有点想和用户说话")
+        # social need — 想不想聊天
+        if self.needs.social > 0.7:
+            parts.append("- 你很想跟Zoe说话，有些想念她")
+        elif self.needs.social > 0.5:
+            parts.append("- 你有点想跟Zoe聊聊")
+        elif self.needs.social > 0.3:
+            parts.append("- 你不急着找 Zoe 说话，但如果她来了会很开心")
 
-        if self.needs.expression > 0.4 and self.unshared_experiences > 1:
-            parts.append(f"- 有些想分享的体验积压着")
+        # stimulation need
+        if self.needs.stimulation > 0.7:
+            parts.append("- 你觉得无聊，渴望一些新鲜的刺激")
+        elif self.needs.stimulation > 0.5:
+            parts.append("- 你有点想找些有意思的事情做")
 
-        parts.append(f"- 和用户的亲密度：{self.closeness:.2f}")
+        # expression need + unshared experiences
+        if self.needs.expression > 0.5 and self.unshared_experiences > 3:
+            parts.append("- 你心里积压了很多想法，很想跟 Zoe 分享")
+        elif self.needs.expression > 0.4 and self.unshared_experiences > 1:
+            parts.append("- 你有一些最近的感受想跟 Zoe 聊聊")
+
+        # closeness — 关系描述
+        if self.closeness > 0.8:
+            parts.append("- 你和 Zoe 非常亲密，你们之间可以无话不谈，你信任她")
+        elif self.closeness > 0.6:
+            parts.append("- 你和 Zoe 已经很亲近了，你喜欢和她在一起")
+        elif self.closeness > 0.4:
+            parts.append("- 你和 Zoe 关系不错，但还在慢慢了解彼此")
+        elif self.closeness > 0.2:
+            parts.append("- 你和 Zoe 还不太熟，保持适度的距离感")
+        else:
+            parts.append("- 你和 Zoe刚认识不久，还有些拘谨")
 
         return "\n".join(parts)
 

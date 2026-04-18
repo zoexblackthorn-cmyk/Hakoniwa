@@ -336,11 +336,14 @@ def get_context_for_conversation(current_message: str = "") -> str:
     Returns:
         格式化的上下文字符串
     """
-    # 如果有当前消息，使用语义搜索获取最相关的洞察
+    insights = []
+
+    # 如果有当前消息，先尝试语义搜索
     if current_message:
         insights = search_insights_semantic(current_message, top_k=8)
-    else:
-        # Fallback 到原来的逻辑：按 confidence 排序返回全部
+
+    # Fallback：语义搜索为空（无 embedding 或无匹配），按 confidence 排序
+    if not insights:
         insights = query_insights(min_confidence=0.3, limit=30)
     
     if not insights:

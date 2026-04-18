@@ -298,12 +298,16 @@ async def set_perspective(s_n: float, t_f: float):
 # ════════════════════════════════════════
 
 _tick_task: asyncio.Task | None = None
+_tick_count: int = 0
 
 
 async def _tick_loop():
-    """每 30 秒运行一次 ennoia.tick()"""
+    """每 30 秒运行一次 ennoia.tick()，每 100 次自动 reflect"""
+    global _tick_count
     while True:
         await asyncio.sleep(30)
+        _tick_count += 1
+
         try:
             summary = ennoia.tick()
             # 有欲望生成或活动切换时才打日志
@@ -311,6 +315,17 @@ async def _tick_loop():
                 print(f"[Ennoia] {summary}")
         except Exception as e:
             print(f"[Ennoia tick error] {e}")
+
+        # 每 100 个 tick（约 50 分钟）自动反思一次
+        if _tick_count % 100 == 0:
+            try:
+                from services.memory import memory_service
+                result = memory_service.reflect()
+                from services.activity_bridge import sync_activity_pool
+                sync_activity_pool()
+                print(f"[Auto-reflect] tick #{_tick_count}: {result}")
+            except Exception as e:
+                print(f"[Auto-reflect error] tick #{_tick_count}: {e}")
 
 
 @app.on_event("startup")

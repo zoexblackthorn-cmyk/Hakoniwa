@@ -136,9 +136,23 @@ class SettingsService:
             if user['personalization']: uparts.append(f"- 她希望你如何对待她：\n{user['personalization']}")
             user_section = "\n".join(uparts) + "\n\n"
         parts.append(user_section)
-        
+
+        # 跨对话桥梁：注入最近的用户消息摘要（不依赖 conversation_id）
+        try:
+            from memory import query_events
+            recent_events = query_events(role="user", limit=10)
+            if recent_events:
+                recent_lines = []
+                for e in recent_events:
+                    # 截取前80字符，避免过长
+                    text = e['content'][:80].replace('\n', ' ')
+                    recent_lines.append(f"- {text}")
+                parts.append(f"\n\n## 最近 Zo 说过的话\n" + "\n".join(recent_lines))
+        except Exception as e:
+            print(f"[build_system_prompt] recent events error: {e}")
+
         if memory_context.strip():
-            parts.append(f"## 你对用户的了解（Memory）\n{memory_context}")
+            parts.append(f"\n\n## 你对用户的了解（Memory）\n{memory_context}")
         if inner_life_context.strip():
             parts.append(f"\n\n## 你的内在状态（Inner Life）\n{inner_life_context}")
 

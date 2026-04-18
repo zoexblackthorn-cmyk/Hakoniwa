@@ -58,15 +58,17 @@ class LLMService:
         return reply
 
     def _load_history(self, conversation_id: Optional[str]) -> list[dict]:
-        """从数据库加载对话历史（跳过空消息）"""
+        """从数据库加载对话历史（跳过空消息，截断到最近 100 条）"""
         if not conversation_id:
             return []
         messages = get_conversation_messages(conversation_id)
-        return [
+        history = [
             {"role": m["role"], "content": m["content"]}
             for m in messages
             if m["content"] and m["content"].strip()
         ]
+        # 只保留最近 100条，避免 token 爆炸
+        return history[-100:]
 
     # ─── Claude (Anthropic) ───
     async def _chat_claude(self, message: str, conversation_id: Optional[str] = None, memory_context: str = "", inner_life_context: str = "", attachments: list[str] | None = None) -> str:
